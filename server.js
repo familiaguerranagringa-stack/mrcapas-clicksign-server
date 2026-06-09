@@ -124,16 +124,15 @@ const server = http.createServer(function(req, res) {
       console.log("DOC ID:", docId);
 
       // 3. Criar signatário
-      // ✅ CORRIGIDO: adicionado delivery: "email" obrigatório para ativação
+      // ✅ CORRIGIDO: removido delivery (não existe em v3)
       await sleep(3000);
       const sigR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: {
           name: col.nome,
-          email: col.email,
-          delivery: "email"
+          email: col.email
         }}
       });
-      console.log("SIGNER:", sigR.status);
+      console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body).slice(0, 200));
       if (sigR.status !== 201) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao criar signatario", detail: sigR.body }));
@@ -143,12 +142,17 @@ const server = http.createServer(function(req, res) {
       console.log("SIGNER ID:", signerId);
 
       // 4. Vincular signatário ao documento
+      // ✅ CORRIGIDO: adicionado auth: "email" para completar o requisito
       await sleep(3000);
       console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
       const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "agree", role: "sign" },
+          attributes: {
+            action: "agree",
+            role: "sign",
+            auth: "email"
+          },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
