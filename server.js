@@ -6,6 +6,13 @@ function sleep(ms) {
   return new Promise(function(r) { setTimeout(r, ms); });
 }
 
+// ✅ Formata CPF para XXX.XXX.XXX-XX
+function formatarCPF(cpf) {
+  const digits = String(cpf).replace(/\D/g, "");
+  if (digits.length !== 11) return cpf;
+  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+}
+
 function request(url, method, token, body) {
   return new Promise(function(resolve, reject) {
     const u = new URL(url);
@@ -123,14 +130,15 @@ const server = http.createServer(function(req, res) {
       const docId = docR.body.data.id;
       console.log("DOC ID:", docId);
 
-      // 3. Criar signatário
-      // ✅ CORRIGIDO: adicionado documentation (CPF) — obrigatório pois has_documentation=true
+      // 3. Criar signatário com CPF formatado
       await sleep(3000);
+      const cpfFormatado = formatarCPF(col.cpf);
+      console.log("CPF formatado:", cpfFormatado);
       const sigR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: {
           name: col.nome,
           email: col.email,
-          documentation: col.cpf
+          documentation: cpfFormatado
         }}
       });
       console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body).slice(0, 200));
@@ -143,7 +151,6 @@ const server = http.createServer(function(req, res) {
       console.log("SIGNER ID:", signerId);
 
       // 4. Vincular signatário ao documento
-      // ✅ CORRIGIDO: removido auth (não disponível nesta conta)
       await sleep(3000);
       console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
       const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
