@@ -1,14 +1,12 @@
 <div style="padding: 1rem 0;">
-<p style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 12px;">Clique no botão abaixo para baixar o server.js atualizado:</p>
+<p style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 12px;">Versão com debug — clique para baixar:</p>
 <button onclick="download()" style="padding: 10px 20px; font-size: 14px; cursor: pointer;">
-  <i class="ti ti-download" aria-hidden="true"></i> Baixar server.js
+  <i class="ti ti-download" aria-hidden="true"></i> Baixar servidor.js (debug)
 </button>
 </div>
-
 <script>
 function download() {
   const content = `const http = require("http");
-
 const PORT = process.env.PORT || 3000;
 const CLICKSIGN_BASE = "https://app.clicksign.com/api/v3";
 
@@ -46,11 +44,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
+  if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
   if (req.method === "GET" && req.url === "/") {
     const fs = require("fs");
@@ -85,63 +79,58 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const env = await request(CLICKSIGN_BASE + "/envelopes", "POST", clicksign_token, {
-        data: {
-          type: "envelopes",
-          attributes: {
-            name: "Admissao - " + colaborador.nome + " - " + colaborador.data,
-            locale: "pt-BR",
-            auto_close: true,
-            remind_interval: 3,
-            block_after_refusal: true,
-          },
-        },
-      });
+      console.log("=== INICIO ENVIO ===");
+      console.log("Colaborador:", colaborador.nome, colaborador.email, colaborador.cpf);
 
+      const env = await request(CLICKSIGN_BASE + "/envelopes", "POST", clicksign_token, {
+        data: { type: "envelopes", attributes: {
+          name: "Admissao - " + colaborador.nome + " - " + colaborador.data,
+          locale: "pt-BR", auto_close: true, remind_interval: 3, block_after_refusal: true,
+        }},
+      });
+      console.log("ENVELOPE STATUS:", env.status);
       if (env.status !== 201) {
+        console.log("ENVELOPE ERROR:", JSON.stringify(env.body));
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body }));
         return;
       }
-
       const envelopeId = env.body.data.id;
+      console.log("ENVELOPE ID:", envelopeId);
 
       const doc = await request(CLICKSIGN_BASE + "/envelopes/" + envelopeId + "/documents", "POST", clicksign_token, {
-        data: {
-          type: "documents",
-          attributes: {
-            filename: documento.nome,
-            content_base64: "data:application/pdf;base64," + documento.pdf_base64,
-          },
-        },
+        data: { type: "documents", attributes: {
+          filename: documento.nome,
+          content_base64: "data:application/pdf;base64," + documento.pdf_base64,
+        }},
       });
-
+      console.log("DOC STATUS:", doc.status);
       if (doc.status !== 201) {
+        console.log("DOC ERROR:", JSON.stringify(doc.body));
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: doc.body }));
         return;
       }
 
       const sigPayload = {
-        data: {
-          type: "requirements",
-          attributes: {
-            action: "sign",
-            name: colaborador.nome,
-            email: colaborador.email,
-            communicate_events: {
-              document_signed: { email: { active: true }, whatsapp: { active: false } },
-              envelope_finished: { email: { active: true } },
-            },
+        data: { type: "requirements", attributes: {
+          action: "sign",
+          name: colaborador.nome,
+          email: colaborador.email,
+          communicate_events: {
+            document_signed: { email: { active: true }, whatsapp: { active: false } },
+            envelope_finished: { email: { active: true } },
           },
-        },
+        }},
       };
-
       if (colaborador.cpf && colaborador.cpf.length >= 11) {
         sigPayload.data.attributes.cpf = colaborador.cpf;
       }
+      console.log("SIG PAYLOAD:", JSON.stringify(sigPayload));
 
       const sig = await request(CLICKSIGN_BASE + "/envelopes/" + envelopeId + "/requirements", "POST", clicksign_token, sigPayload);
+      console.log("SIG STATUS:", sig.status);
+      console.log("SIG BODY:", JSON.stringify(sig.body));
 
       if (sig.status !== 201) {
         res.writeHead(500);
@@ -152,13 +141,15 @@ const server = http.createServer(async (req, res) => {
       const ativ = await request(CLICKSIGN_BASE + "/envelopes/" + envelopeId + "/activate", "PATCH", clicksign_token, {
         data: { type: "envelopes", id: envelopeId },
       });
-
+      console.log("ATIV STATUS:", ativ.status);
       if (ativ.status !== 200) {
+        console.log("ATIV ERROR:", JSON.stringify(ativ.body));
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body }));
         return;
       }
 
+      console.log("=== SUCESSO ===");
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         envelopeId,
@@ -167,6 +158,7 @@ const server = http.createServer(async (req, res) => {
       }));
 
     } catch (e) {
+      console.log("ERRO GERAL:", e.message);
       res.writeHead(500);
       res.end(JSON.stringify({ error: e.message }));
     }
