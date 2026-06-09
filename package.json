@@ -1,0 +1,12 @@
+{
+  "name": "mrcapas-clicksign-server",
+  "version": "1.0.0",
+  "description": "Servidor proxy ClickSign para MR. CAPAS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
