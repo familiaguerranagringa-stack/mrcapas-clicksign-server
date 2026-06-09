@@ -171,14 +171,13 @@ const server = http.createServer(function(req, res) {
         return;
       }
 
-      // 4b. Requisito de rubrica com pages
-      // ✅ pages: [1] — rubrica na primeira página (rubric_enabled=true exige este requisito)
+      // 4b. Requisito de rubrica — pages como string ✅
       await sleep(2000);
       console.log("Criando requisito RUBRICATE");
       const reqRub = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "rubricate", pages: [1] },
+          attributes: { action: "rubricate", pages: "1" },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
