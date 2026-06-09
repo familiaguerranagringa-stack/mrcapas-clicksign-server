@@ -45,8 +45,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && req.url === "/") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "MR. CAPAS ClickSign Server online" }));
+    const fs = require("fs");
+    const path = require("path");
+    const htmlPath = path.join(__dirname, "index.html");
+    if (fs.existsSync(htmlPath)) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(fs.readFileSync(htmlPath));
+    } else {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "MR. CAPAS ClickSign Server online" }));
+    }
     return;
   }
 

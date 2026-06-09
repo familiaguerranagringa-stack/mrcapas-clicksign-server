@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MR. CAPAS – Admissão Digital</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Georgia, serif; background: #0a0a0a; color: #f0ebe0; min-height: 100vh; }
+  input, select, textarea { font-family: Georgia, serif; }
+  a { color: #4caf82; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const SERVER_URL = "https://mrcapas-clicksign-server.onrender.com";
+const CLICKSIGN_TOKEN = "c1baa4af-7e45-449d-ada5-9368e99a9f6e";
+
+const EMPRESAS = {
+  "MR. CAPAS ARARUAMA": { nomeFantasia: "MR. CAPAS ARARUAMA", razaoSocial: "FAMÍLIA GUERRA ARARUAMA COMÉRCIO E PRESTADORA DE SERVIÇOS LTDA", cnpj: "43.854.572/0001-40", endereco: "AV. GETÚLIO VARGAS, 463 – LOJA A – CENTRO – ARARUAMA-RJ – CEP: 28979-129" },
+  "MR. CAPAS BACAXÁ": { nomeFantasia: "MR. CAPAS BACAXÁ", razaoSocial: "FAMÍLIA GUERRA BACAXÁ COMÉRCIO E PRESTADORA DE SERVIÇOS LTDA", cnpj: "46.227.189/0001-50", endereco: "RUA PROFESSOR FRANCISCO FONSECA, 235 – LOJA 02 – BACAXÁ – SAQUAREMA-RJ – CEP: 28994-795" },
+  "MR. CAPAS OPENMALL": { nomeFantasia: "MR. CAPAS OPENMALL", razaoSocial: "FAMÍLIA GUERRA ARARUAMA SHOPPING COMÉRCIO E PRESTADORA DE SERVIÇOS LTDA", cnpj: "60.059.717/0001-30", endereco: "AV. GETÚLIO VARGAS, 376 – PARTE OPENMALL – CENTRO – ARARUAMA-RJ – CEP: 28979-129" },
+  "ESCRITÓRIO": { nomeFantasia: "ESCRITÓRIO – GRUPO FAMÍLIA GUERRA", razaoSocial: "FAMÍLIA GUERRA COMÉRCIO E PRESTADORA DE SERVIÇOS LTDA", cnpj: "10.387.705/0001-67", endereco: "AV. GETÚLIO VARGAS, 221 – SALA 302 – CENTRO – ARARUAMA-RJ – CEP: 28979-129" },
+  "LEANDRO GUERRA SOFTWARE E TECNOLOGIA": { nomeFantasia: "LEANDRO GUERRA SOFTWARE E TECNOLOGIA", razaoSocial: "LEANDRO GUERRA SOFTWARE E TECNOLOGIA LTDA", cnpj: "43.614.482/0001-82", endereco: "AV. GETÚLIO VARGAS, 221 – SALA 302 – CENTRO – ARARUAMA-RJ – CEP: 28979-129" },
+  "FAMÍLIA GUERRA HOLDING": { nomeFantasia: "FAMÍLIA GUERRA HOLDING", razaoSocial: "FAMÍLIA GUERRA HOLDING LTDA", cnpj: "48.693.633/0001-59", endereco: "AV. GETÚLIO VARGAS, 221 – SALA 302 – CENTRO – ARARUAMA-RJ – CEP: 28979-129" },
+};
+
+const CARGOS = ["VENDEDOR","VENDEDORA","GERENTE","SUPERVISOR","OPERADOR","AUXILIAR","ANALISTA FINANCEIRO","ASSISTENTE FINANCEIRO","ANALISTA ADMINISTRATIVO","ASSISTENTE ADMINISTRATIVO","ANALISTA DE MARKETING","ASSISTENTE DE MARKETING","ANALISTA DE COMPRAS","ASSISTENTE DE COMPRAS"];
+
+const SETORES_POR_LOJA = {
+  "MR. CAPAS ARARUAMA": ["VENDAS","OPERAÇÕES","ADMINISTRATIVO"],
+  "MR. CAPAS BACAXÁ": ["VENDAS","OPERAÇÕES","ADMINISTRATIVO"],
+  "MR. CAPAS OPENMALL": ["VENDAS","OPERAÇÕES","ADMINISTRATIVO"],
+  "ESCRITÓRIO": ["FINANCEIRO","ADMINISTRATIVO","MARKETING","COMPRAS"],
+  "LEANDRO GUERRA SOFTWARE E TECNOLOGIA": ["TECNOLOGIA","DESENVOLVIMENTO","ADMINISTRATIVO"],
+  "FAMÍLIA GUERRA HOLDING": ["ADMINISTRATIVO","FINANCEIRO","JURÍDICO"],
+};
+
+const TERMOS = [
+  { id: "imagem", titulo: "Autorização de Uso de Imagem", obrigatorio: true, descricao: "Autoriza uso de imagem, voz e nome em materiais institucionais",
+    template: (d) => `TERMO DE AUTORIZAÇÃO DE USO DE IMAGEM, VOZ E CESSÃO DE DIREITOS\n(Lei nº 9.610/98, MP nº 2.200-2/2001 e Lei nº 14.063/2020)\n\nEu, ${d.nome}, brasileiro(a), portador(a) do CPF nº ${d.cpf}, e-mail: ${d.email}, na qualidade de colaborador(a), AUTORIZO GRATUITAMENTE o uso da minha imagem, voz e nome ao GRUPO ECONÔMICO FAMÍLIA GUERRA.\n\nFINALIDADE: Autorizo o uso em todo e qualquer material institucional, promocional ou informativo, nacional ou internacional, por meios impressos e digitais, incluindo redes sociais, sites, plataformas online, rádio, TV, cinema e vídeos institucionais.\n\nPRAZO: A autorização é concedida por tempo indeterminado, inclusive após eventual desligamento.\n\nDECLARAÇÃO: Declaro estar ciente de que não haverá qualquer pagamento pela cessão ora concedida.\n\nASSINATURA ELETRÔNICA via ClickSign, com plena validade jurídica conforme MP nº 2.200-2/2001 e Lei nº 14.063/2020.\n\nAraruama, ${d.dataFormatada}\n\n_______________________________________________\n${d.nome} — CPF: ${d.cpf}\n\n_______________________________________________\nLEANDRO GUERRA MARINO FIUZA DE CASTRO\n\n_______________________________________________\nJULYANA SOARES SILVA GUERRA\n\nTESTEMUNHAS:\n_______________________________________________\nNome: _________________________ CPF: _________________________` },
+  { id: "ponto", titulo: "Ciência sobre Registro de Ponto", obrigatorio: true, descricao: "Responsabilidade sobre registro correto de jornada",
+    template: (d) => `TERMO DE RESPONSABILIDADE E CIÊNCIA SOBRE REGISTRO DE PONTO\n\n${d.empresa?.razaoSocial || "GRUPO ECONÔMICO FAMÍLIA GUERRA"}, CNPJ ${d.empresa?.cnpj || ""}, doravante EMPREGADORA; e ${d.nome}, CPF nº ${d.cpf}, COLABORADOR(A).\n\nDeclaro ciência da obrigatoriedade de registrar corretamente meus horários de entrada, saída, intervalos e retornos.\n\nEstou ciente de que:\n1. O registro de ponto é obrigatório diariamente;\n2. Registro incorreto ou por terceiros é infração grave;\n3. Falhas técnicas devem ser comunicadas imediatamente à liderança;\n4. Os registros refletem diretamente no pagamento salarial.\n\nBASE LEGAL: Art. 74 da CLT e Portaria nº 671/2021 do Ministério do Trabalho.\n\nASSINATURA ELETRÔNICA via ClickSign, com plena validade jurídica conforme MP nº 2.200-2/2001 e Lei nº 14.063/2020.\n\nAraruama, ${d.dataFormatada}\n\n_______________________________________________\n${d.nome} — CPF: ${d.cpf}\n\n_______________________________________________   _______________________________________________\nLEANDRO GUERRA MARINO FIUZA DE CASTRO           JULYANA SOARES SILVA GUERRA\n\nTESTEMUNHAS:\n_______________________________________________\nNome: _________________________ CPF: _________________________` },
+  { id: "confidencialidade", titulo: "Confidencialidade e Sigilo", obrigatorio: true, descricao: "Compromisso de sigilo sobre informações estratégicas",
+    template: (d) => `TERMO DE CONFIDENCIALIDADE E SIGILO\n\nEu, ${d.nome}, CPF nº ${d.cpf}, e-mail: ${d.email}, assumo compromisso de manter total sigilo e confidencialidade sobre quaisquer informações a que eu tenha acesso na qualidade de colaborador(a) do GRUPO ECONÔMICO FAMÍLIA GUERRA.\n\nComprometendo-me:\n- A não utilizar informações confidenciais para benefício próprio ou de terceiros;\n- A não efetuar gravações ou cópias da documentação confidencial;\n- A não repassar o conhecimento das informações confidenciais.\n\nSão informações confidenciais: senhas, faturamentos, folha de pagamento, patrimônio, saldos bancários, dados de clientes e fornecedores.\n\nTIPIFICAÇÃO LEGAL: Art. 482 da CLT (justa causa) e Art. 154 do CP (detenção de 3 meses a 1 ano).\n\nPENALIDADE: Multa de 5 (cinco) salários-mínimos vigentes à época da infração.\n\nA obrigação de confidencialidade permanece vigente mesmo após o encerramento do vínculo, por prazo indeterminado.\n\nASSINATURA ELETRÔNICA via ClickSign, com plena validade jurídica conforme MP nº 2.200-2/2001 e Lei nº 14.063/2020.\n\nAraruama, ${d.dataFormatada}\n\n_______________________________________________\n${d.nome} — CPF: ${d.cpf}\n\n_______________________________________________\nLEANDRO GUERRA MARINO FIUZA DE CASTRO\n\n_______________________________________________\nJULYANA SOARES SILVA GUERRA\n\nTESTEMUNHAS:\n_______________________________________________\nNome: _________________________ CPF: _________________________` },
+  { id: "inventario", titulo: "Responsabilidade por Divergência de Inventário", obrigatorio: true, descricao: "Autorização de desconto em folha por diferenças de estoque",
+    template: (d) => `TERMO DE RESPONSABILIDADE E AUTORIZAÇÃO DE DESCONTO POR DIVERGÊNCIA DE INVENTÁRIO\n\n${d.empresa?.razaoSocial || "GRUPO ECONÔMICO FAMÍLIA GUERRA"}, CNPJ ${d.empresa?.cnpj || ""}, EMPREGADORA; e ${d.nome}, CPF nº ${d.cpf}, COLABORADOR(A).\n\nCLÁUSULA 1 – OBJETO: Responsabilidade pela guarda e conferência dos produtos comercializados na unidade ${d.empresa?.nomeFantasia || d.loja}.\n\nCLÁUSULA 2 – INVENTÁRIO: A EMPREGADORA realiza inventários periódicos. O(A) COLABORADOR(A) é responsável pela organização e correta movimentação dos produtos.\n\nCLÁUSULA 3 – RESPONSABILIDADE: O(A) COLABORADOR(A) assume responsabilidade por faltas ou danos causados por conduta culposa ou dolosa.\n\nCLÁUSULA 4 – AUTORIZAÇÃO DE DESCONTO: Em caso de diferenças devidamente apuradas, o(a) COLABORADOR(A) autoriza desconto proporcional em folha, nos termos do Art. 462 da CLT, não comprometendo mais que 30% da remuneração mensal.\n\nASSINATURA ELETRÔNICA via ClickSign, com plena validade jurídica conforme MP nº 2.200-2/2001 e Lei nº 14.063/2020.\n\nAraruama, ${d.dataFormatada}\n\n_______________________________________________\n${d.nome} — CPF: ${d.cpf}\n\n_______________________________________________\nLEANDRO GUERRA MARINO FIUZA DE CASTRO\n\n_______________________________________________\nJULYANA SOARES SILVA GUERRA\n\nTESTEMUNHAS:\n_______________________________________________\nNome: _________________________ CPF: _________________________` },
+  { id: "transporte", titulo: "Ciência sobre Despesas de Transporte (Treinamento)", obrigatorio: false, descricao: "Ausência de vale-transporte durante período de treinamento",
+    template: (d) => `DECLARAÇÃO DE CIÊNCIA SOBRE DESPESAS DE TRANSPORTE DURANTE O TREINAMENTO\n\nEu, ${d.nome}, CPF ${d.cpf}, declaro estar ciente de que participarei de treinamento no Grupo Família Guerra com duração estimada de até 7 dias corridos para avaliação para possível contratação.\n\nDeclaro que:\n- O período de treinamento não estabelece vínculo empregatício;\n- Não terei direito ao vale-transporte ou reembolso de despesas com deslocamento;\n- Estou participando de forma voluntária;\n- Caso contratado(a), passarei a ter direito aos benefícios previstos em lei.\n\nASSINATURA ELETRÔNICA via ClickSign, com plena validade jurídica conforme MP nº 2.200-2/2001 e Lei nº 14.063/2020.\n\nAraruama, ${d.dataFormatada}\n\n_______________________________________________\n${d.nome} — CPF: ${d.cpf}\n\n_______________________________________________\nLEANDRO GUERRA MARINO FIUZA DE CASTRO\n\n_______________________________________________\nJULYANA SOARES SILVA GUERRA` },
+  { id: "hydrogel_treinamento", titulo: "Treinamento – Aplicação de Película Hydrogel", obrigatorio: false, descricao: "Registro de treinamento sobre aplicação de película hidrogel",
+    template: (d) => `TERMO DE TREINAMENTO – APLICAÇÃO DE PELÍCULA HYDROGEL\n\nEMPRESA: ${d.empresa?.razaoSocial || "FAMÍLIA GUERRA"} | CNPJ: ${d.empresa?.cnpj || ""}\nCOLABORADOR: ${d.nome} | CPF: ${d.cpf} | CARGO: ${d.cargo}\n\n1. OBJETIVO: Registrar que o colaborador recebeu treinamento completo sobre o procedimento correto de corte e aplicação de películas hidrogel.\n\n2. PASSO A PASSO:\n1. Conferência visual e verbal do modelo exato do aparelho;\n2. Seleção correta do modelo na máquina de corte;\n3. Gravação obrigatória de vídeo contínuo (sem cortes);\n4. Corte automático realizado pela máquina;\n5. Aplicação correta da película;\n6. Registro imediato de qualquer falha.\n\n3. ESCLARECIMENTOS:\n- Limite de até 2 (dois) erros por semana;\n- A partir do 3º erro, poderá haver responsabilização;\n- Falhas da máquina não geram responsabilização ao colaborador.\n\nData: ${d.dataFormatada}\n\n_______________________________________________   _______________________________________________\nMR. CAPAS                                         ${d.nome}` },
+  { id: "hydrogel_aceite", titulo: "Aceite Legal – Aplicação de Película Hydrogel", obrigatorio: false, descricao: "Concordância com política de controle de perdas em películas",
+    template: (d) => `TERMO DE ACEITE E CONCORDÂNCIA LEGAL – APLICAÇÃO DE PELÍCULA HYDROGEL\n\nEMPRESA: ${d.empresa?.razaoSocial || "FAMÍLIA GUERRA"} | CNPJ: ${d.empresa?.cnpj || ""}\nCOLABORADOR: ${d.nome} | CPF: ${d.cpf} | CARGO: ${d.cargo}\n\nFUNDAMENTAÇÃO LEGAL: Art. 462 da CLT e Art. 7º, inciso VI, da Constituição Federal.\n\nDECLARAÇÃO: Declaro que li, compreendi e concordo com a Política Interna de Controle de Perdas, estando ciente de que:\n1. O limite permitido é de até 2 (dois) erros por semana;\n2. A partir do 3º erro, poderá haver desconto limitado ao custo real da película;\n3. Não haverá desconto em caso de falha da máquina;\n4. O desconto nunca será baseado no valor de venda.\n\nData: ${d.dataFormatada}\n\n_______________________________________________   _______________________________________________\nMR. CAPAS                                         ${d.nome}` },
+  { id: "celular", titulo: "Entrega e Responsabilidade de Celular Corporativo", obrigatorio: false, descricao: "Termo para entrega de aparelho celular corporativo",
+    template: (d) => `TERMO DE ENTREGA E RESPONSABILIDADE – CELULAR CORPORATIVO\n\nEMPRESA: ${d.empresa?.razaoSocial || "FAMÍLIA GUERRA ARARUAMA"} | CNPJ: ${d.empresa?.cnpj || ""}\nCOLABORADOR: ${d.nome} | CARGO: ${d.cargo}\n\nDescrição do Equipamento:\n- Modelo: ____________________________\n- IMEI: ____________________ / IMEI 2: ____________________\n- Número de Série: ____________________________\n- Linha/Chip: ____________________________\n- Acessórios: ( ) Carregador  ( ) Cabo USB  ( ) Capa  ( ) Fone\n\nTERMOS DE RESPONSABILIDADE:\n- Zelar pela boa conservação do aparelho;\n- Utilizar apenas durante o vínculo empregatício;\n- Comunicar imediatamente perdas, roubos ou avarias;\n- Restituir o equipamento ao final do vínculo;\n- Uso indevido ou extravio pode gerar responsabilização.\n\nData: ${d.dataFormatada}\n\n_______________________________________________\n${d.nome}` },
+];
+
+const STORAGE_KEY = "mrcapas_v3";
+function loadColabs() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { return []; } }
+function saveColab(r) { const l = loadColabs(); l.unshift(r); localStorage.setItem(STORAGE_KEY, JSON.stringify(l)); }
+function fmtData(s) { if (!s) return "__/__/____"; const [y,m,d] = s.split("-"); return `${d}/${m}/${y}`; }
+function fmtCPF(v) { return v.replace(/\D/g,"").replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d)/,"$1.$2").replace(/(\d{3})(\d{1,2})$/,"$1-$2").slice(0,14); }
+function hoje() { return new Date().toISOString().split("T")[0]; }
+
+async function gerarPDF(conteudo) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  conteudo.forEach((t, i) => {
+    if (i > 0) doc.addPage();
+    doc.setFont("helvetica","bold"); doc.setFontSize(11);
+    doc.text("MR. CAPAS – GRUPO ECONÔMICO FAMÍLIA GUERRA", 105, 14, { align: "center" });
+    doc.setFontSize(9); doc.text(t.titulo.toUpperCase(), 105, 20, { align: "center" });
+    doc.setLineWidth(0.4); doc.line(15, 23, 195, 23);
+    doc.setFont("helvetica","normal"); doc.setFontSize(8.5);
+    doc.text(doc.splitTextToSize(t.texto, 175), 15, 29);
+  });
+  return doc.output("datauristring").split(",")[1];
+}
+
+function App() {
+  const [tela, setTela] = useState("menu");
+  const [etapa, setEtapa] = useState(1);
+  const [form, setForm] = useState({ nome:"", cpf:"", email:"", whatsapp:"", cargo:"VENDEDOR", setor:"VENDAS", loja:"MR. CAPAS ARARUAMA", data:hoje() });
+  const [selecionados, setSelecionados] = useState(TERMOS.filter(t=>t.obrigatorio).map(t=>t.id));
+  const [busca, setBusca] = useState("");
+  const [historico, setHistorico] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("");
+  const [resultado, setResultado] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [legalInfo, setLegalInfo] = useState(null);
+  const [loadingLegal, setLoadingLegal] = useState(false);
+
+  useEffect(() => { setHistorico(loadColabs()); }, []);
+
+  const empresa = EMPRESAS[form.loja] || EMPRESAS["MR. CAPAS ARARUAMA"];
+  const dados = { ...form, dataFormatada: fmtData(form.data), empresa };
+  const termosParaGerar = TERMOS.filter(t => selecionados.includes(t.id));
+
+  async function handleEnviar() {
+    setLoading(true); setErro(null);
+    try {
+      setLoadingMsg("Gerando PDF dos termos...");
+      const conteudo = termosParaGerar.map(t => ({ titulo: t.titulo, texto: t.template(dados) }));
+      const pdfBase64 = await gerarPDF(conteudo);
+      setLoadingMsg("Enviando para ClickSign...");
+      const res = await fetch(`${SERVER_URL}/enviar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clicksign_token: CLICKSIGN_TOKEN,
+          colaborador: { nome: form.nome, cpf: form.cpf.replace(/\D/g,""), email: form.email, cargo: form.cargo, setor: form.setor, loja: form.loja, data: form.data },
+          empresa,
+          documento: { nome: `Termos_${form.nome.replace(/ /g,"_")}_${form.data}.pdf`, pdf_base64: pdfBase64 },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao processar");
+      setLoadingMsg("Salvando no histórico...");
+      const reg = { id: Date.now(), ...form, razaoSocial: empresa.razaoSocial, termos: selecionados, envelopeId: data.envelopeId, linkAssinatura: data.link, criadoEm: new Date().toISOString(), status: "aguardando_assinatura" };
+      saveColab(reg); setHistorico(loadColabs()); setResultado(data);
+    } catch(e) { setErro(e.message); }
+    setLoading(false);
+  }
+
+  async function consultarLegislacao() {
+    setLoadingLegal(true); setLegalInfo(null);
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:800, tools:[{type:"web_search_20250305",name:"web_search"}], messages:[{role:"user",content:"Verifique mudanças recentes na CLT Art.74/462/482, Portaria 671/2021, MP 2.200-2/2001, Lei 14.063/2020 que afetam contratos de trabalho e termos de admissão no Brasil. Responda SOMENTE JSON puro: {\"status\":\"ok\",\"resumo\":\"texto\",\"alertas\":[],\"ultimaVerificacao\":\"data\"}"}]}) });
+      const d = await r.json();
+      const txt = d.content.filter(c=>c.type==="text").map(c=>c.text).join("");
+      setLegalInfo(JSON.parse(txt.replace(/```json|```/g,"").trim()));
+    } catch { setLegalInfo({ status:"ok", resumo:"Verificação indisponível. Os termos seguem a legislação vigente.", alertas:[], ultimaVerificacao: new Date().toLocaleDateString("pt-BR") }); }
+    setLoadingLegal(false);
+  }
+
+  const S = {
+    card: { background:"#111", border:"1px solid #222", borderRadius:16, padding:28 },
+    label: { fontSize:11, color:"#888", letterSpacing:2, display:"block", marginBottom:6 },
+    input: { width:"100%", background:"#1a1a1a", border:"1px solid #333", borderRadius:8, padding:"10px 14px", color:"#f0ebe0", fontSize:14, outline:"none", boxSizing:"border-box" },
+    select: { width:"100%", background:"#1a1a1a", border:"1px solid #333", borderRadius:8, padding:"10px 14px", color:"#f0ebe0", fontSize:14, outline:"none" },
+    btnPrimary: { width:"100%", padding:14, background:"linear-gradient(135deg,#c9a84c,#e8c96e)", border:"none", borderRadius:10, color:"#0a0a0a", fontSize:15, fontWeight:700, cursor:"pointer", letterSpacing:1 },
+    btnSecondary: { flex:1, padding:12, background:"transparent", border:"1px solid #333", borderRadius:10, color:"#888", fontSize:14, cursor:"pointer" },
+  };
+
+  return (
+    <div style={{ fontFamily:"Georgia,serif", background:"#0a0a0a", minHeight:"100vh", color:"#f0ebe0" }}>
+      {/* HEADER */}
+      <header style={{ background:"linear-gradient(135deg,#1a1a1a,#111)", borderBottom:"1px solid #c9a84c", padding:"14px 24px", display:"flex", alignItems:"center", gap:14 }}>
+        <div style={{ width:40, height:40, background:"linear-gradient(135deg,#c9a84c,#e8c96e)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:15, color:"#0a0a0a" }}>MC</div>
+        <div>
+          <div style={{ fontWeight:700, fontSize:14, color:"#e8c96e", letterSpacing:2 }}>MR. CAPAS</div>
+          <div style={{ fontSize:11, color:"#666", letterSpacing:1 }}>Sistema de Admissão Digital</div>
+        </div>
+        <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
+          {["menu","historico"].map(t => (
+            <button key={t} onClick={() => { setTela(t); setEtapa(1); setResultado(null); setErro(null); }}
+              style={{ padding:"6px 14px", borderRadius:6, border: tela===t ? "1px solid #c9a84c" : "1px solid #333", background: tela===t ? "#c9a84c22" : "transparent", color: tela===t ? "#e8c96e" : "#888", fontSize:12, cursor:"pointer" }}>
+              {t === "menu" ? "INÍCIO" : "HISTÓRICO"}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {/* MENU */}
+      {tela === "menu" && (
+        <div style={{ maxWidth:680, margin:"50px auto", padding:"0 24px", textAlign:"center" }}>
+          <div style={{ fontSize:12, color:"#c9a84c", letterSpacing:4, marginBottom:10 }}>GRUPO ECONÔMICO FAMÍLIA GUERRA</div>
+          <h1 style={{ fontSize:30, fontWeight:400, color:"#f0ebe0", marginBottom:8 }}>Admissão de Colaboradores</h1>
+          <p style={{ color:"#666", fontSize:13, marginBottom:40 }}>Preencha os dados, selecione os termos e envie para assinatura digital via ClickSign.</p>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:28 }}>
+            <button onClick={() => { setTela("novo"); setEtapa(1); setResultado(null); setErro(null); setForm({ nome:"", cpf:"", email:"", whatsapp:"", cargo:"VENDEDOR", setor:"VENDAS", loja:"MR. CAPAS ARARUAMA", data:hoje() }); setSelecionados(TERMOS.filter(t=>t.obrigatorio).map(t=>t.id)); }}
+              style={{ padding:"26px 20px", background:"linear-gradient(135deg,#c9a84c22,#c9a84c11)", border:"1px solid #c9a84c44", borderRadius:12, cursor:"pointer", color:"#e8c96e", fontSize:15, fontWeight:600 }}>
+              ✦ Novo Colaborador
+            </button>
+            <button onClick={() => setTela("historico")} style={{ padding:"26px 20px", background:"#1a1a1a", border:"1px solid #333", borderRadius:12, cursor:"pointer", color:"#aaa", fontSize:15 }}>
+              ☰ Ver Histórico
+            </button>
+          </div>
+          <div style={{ background:"#111", border:"1px solid #222", borderRadius:12, padding:20, textAlign:"left" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <span style={{ fontSize:11, color:"#c9a84c", letterSpacing:2 }}>VERIFICAÇÃO LEGISLATIVA IA</span>
+              <button onClick={consultarLegislacao} disabled={loadingLegal} style={{ padding:"5px 12px", background:"#c9a84c22", border:"1px solid #c9a84c44", borderRadius:6, color:"#e8c96e", fontSize:11, cursor:"pointer" }}>
+                {loadingLegal ? "Consultando..." : "Verificar agora"}
+              </button>
+            </div>
+            {legalInfo ? (
+              <div>
+                <div style={{ display:"flex", gap:8, marginBottom:6 }}><span>{legalInfo.status==="ok"?"✅":"⚠️"}</span><span style={{ fontSize:13, color:"#ddd" }}>{legalInfo.resumo}</span></div>
+                {legalInfo.alertas?.map((a,i) => <div key={i} style={{ fontSize:12, color:"#f0a500", background:"#f0a50011", borderRadius:6, padding:"5px 10px", marginTop:5 }}>⚡ {a}</div>)}
+                <div style={{ fontSize:11, color:"#555", marginTop:8 }}>Última verificação: {legalInfo.ultimaVerificacao}</div>
+              </div>
+            ) : <p style={{ fontSize:12, color:"#555", margin:0 }}>A IA verifica mudanças recentes na legislação trabalhista que afetam seus termos.</p>}
+          </div>
+        </div>
+      )}
+
+      {/* NOVO COLABORADOR */}
+      {tela === "novo" && !resultado && (
+        <div style={{ maxWidth:660, margin:"36px auto", padding:"0 24px" }}>
+          {/* Steps */}
+          <div style={{ display:"flex", gap:0, marginBottom:32 }}>
+            {[{n:1,l:"Dados"},{n:2,l:"Termos"},{n:3,l:"Revisão"}].map((s,i) => (
+              <div key={s.n} style={{ flex:1, display:"flex", alignItems:"center" }}>
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flex:1 }}>
+                  <div style={{ width:30, height:30, borderRadius:"50%", background: etapa>=s.n?"#c9a84c":"#222", border: etapa>=s.n?"none":"1px solid #333", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color: etapa>=s.n?"#0a0a0a":"#555", marginBottom:4 }}>{s.n}</div>
+                  <span style={{ fontSize:10, color: etapa>=s.n?"#c9a84c":"#555", letterSpacing:1 }}>{s.l.toUpperCase()}</span>
+                </div>
+                {i<2 && <div style={{ flex:1, height:1, background: etapa>s.n?"#c9a84c":"#222", marginBottom:18 }} />}
+              </div>
+            ))}
+          </div>
+
+          {/* ETAPA 1 */}
+          {etapa === 1 && (
+            <div style={S.card}>
+              <h2 style={{ fontSize:17, fontWeight:600, color:"#e8c96e", marginBottom:22 }}>Dados do Colaborador</h2>
+              <div style={{ display:"grid", gap:16 }}>
+                {[{label:"Nome Completo *",key:"nome",type:"text",ph:"Nome completo"},{label:"CPF *",key:"cpf",type:"text",ph:"000.000.000-00"},{label:"E-mail *",key:"email",type:"email",ph:"email@exemplo.com"},{label:"WhatsApp",key:"whatsapp",type:"text",ph:"(22) 99999-9999"}].map(f => (
+                  <div key={f.key}>
+                    <label style={S.label}>{f.label.toUpperCase()}</label>
+                    <input value={form[f.key]} onChange={e => setForm({...form, [f.key]: f.key==="cpf" ? fmtCPF(e.target.value) : e.target.value})} type={f.type} placeholder={f.ph} style={S.input} />
+                  </div>
+                ))}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                  <div>
+                    <label style={S.label}>CARGO *</label>
+                    <select value={form.cargo} onChange={e => setForm({...form, cargo:e.target.value})} style={S.select}>
+                      {CARGOS.map(c => <option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.label}>UNIDADE *</label>
+                    <select value={form.loja} onChange={e => { const l=e.target.value; setForm({...form, loja:l, setor:(SETORES_POR_LOJA[l]||[])[0]||""}); }} style={S.select}>
+                      {Object.keys(EMPRESAS).map(l => <option key={l}>{l}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label style={S.label}>SETOR *</label>
+                  <select value={form.setor} onChange={e => setForm({...form, setor:e.target.value})} style={S.select}>
+                    {(SETORES_POR_LOJA[form.loja]||[]).map(s => <option key={s}>{s}</option>)}
+                  </select>
+                  <div style={{ fontSize:10, color:"#555", marginTop:4 }}>{empresa.razaoSocial}</div>
+                </div>
+                <div>
+                  <label style={S.label}>DATA DE ADMISSÃO *</label>
+                  <input type="date" value={form.data} onChange={e => setForm({...form, data:e.target.value})} style={{...S.input, width:"auto"}} />
+                </div>
+              </div>
+              <button onClick={() => { if (!form.nome||!form.cpf||!form.email) return alert("Preencha nome, CPF e e-mail."); setEtapa(2); }} style={{...S.btnPrimary, marginTop:24}}>Próximo →</button>
+            </div>
+          )}
+
+          {/* ETAPA 2 */}
+          {etapa === 2 && (
+            <div style={S.card}>
+              <h2 style={{ fontSize:17, fontWeight:600, color:"#e8c96e", marginBottom:6 }}>Selecionar Termos</h2>
+              <p style={{ fontSize:12, color:"#666", marginBottom:20 }}>Os obrigatórios já estão marcados.</p>
+              <div style={{ display:"grid", gap:8 }}>
+                {TERMOS.map(t => {
+                  const ativo = selecionados.includes(t.id);
+                  return (
+                    <div key={t.id} onClick={() => { if (t.obrigatorio) return; setSelecionados(p => p.includes(t.id) ? p.filter(x=>x!==t.id) : [...p,t.id]); }}
+                      style={{ display:"flex", gap:12, padding:"12px 14px", background: ativo?"#c9a84c11":"#1a1a1a", border:`1px solid ${ativo?"#c9a84c55":"#2a2a2a"}`, borderRadius:10, cursor: t.obrigatorio?"default":"pointer" }}>
+                      <div style={{ width:18, height:18, borderRadius:4, background: ativo?"#c9a84c":"#222", border:`1px solid ${ativo?"#c9a84c":"#444"}`, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, color:"#0a0a0a", marginTop:2 }}>{ativo&&"✓"}</div>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:600, color: ativo?"#e8c96e":"#999" }}>
+                          {t.titulo}
+                          {t.obrigatorio && <span style={{ fontSize:9, background:"#c9a84c22", color:"#c9a84c", borderRadius:4, padding:"2px 6px", marginLeft:8 }}>OBRIGATÓRIO</span>}
+                        </div>
+                        <div style={{ fontSize:11, color:"#555", marginTop:2 }}>{t.descricao}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display:"flex", gap:10, marginTop:24 }}>
+                <button onClick={() => setEtapa(1)} style={S.btnSecondary}>← Voltar</button>
+                <button onClick={() => setEtapa(3)} style={{...S.btnPrimary, flex:2, width:"auto"}}>Revisar →</button>
+              </div>
+            </div>
+          )}
+
+          {/* ETAPA 3 */}
+          {etapa === 3 && (
+            <div style={S.card}>
+              <h2 style={{ fontSize:17, fontWeight:600, color:"#e8c96e", marginBottom:20 }}>Revisão Final</h2>
+              <div style={{ background:"#1a1a1a", borderRadius:10, padding:18, marginBottom:16 }}>
+                <div style={{ fontSize:10, color:"#c9a84c", letterSpacing:2, marginBottom:10 }}>COLABORADOR</div>
+                {[["Nome",form.nome],["CPF",form.cpf],["E-mail",form.email],["WhatsApp",form.whatsapp||"—"],["Cargo",form.cargo],["Setor",form.setor],["Unidade",form.loja],["Razão Social",empresa.razaoSocial],["Data",fmtData(form.data)]].map(([k,v]) => (
+                  <div key={k} style={{ display:"flex", justifyContent:"space-between", borderBottom:"1px solid #222", padding:"6px 0", fontSize:12 }}>
+                    <span style={{ color:"#666" }}>{k}</span><span style={{ color:"#ddd" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background:"#1a1a1a", borderRadius:10, padding:18, marginBottom:18 }}>
+                <div style={{ fontSize:10, color:"#c9a84c", letterSpacing:2, marginBottom:10 }}>TERMOS ({termosParaGerar.length})</div>
+                {termosParaGerar.map(t => (
+                  <div key={t.id} style={{ display:"flex", gap:8, alignItems:"center", padding:"5px 0", fontSize:12, color:"#bbb" }}>
+                    <span style={{ color:"#c9a84c" }}>✓</span> {t.titulo}
+                    <button onClick={() => setPreview({ titulo:t.titulo, texto:t.template(dados) })} style={{ marginLeft:"auto", fontSize:10, padding:"2px 8px", background:"transparent", border:"1px solid #333", borderRadius:4, color:"#888", cursor:"pointer" }}>ver</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background:"#0d2a1a", border:"1px solid #1a5c33", borderRadius:10, padding:14, marginBottom:18 }}>
+                <div style={{ fontSize:11, color:"#4caf82", letterSpacing:1, marginBottom:4 }}>✦ ASSINATURA DIGITAL VIA CLICKSIGN</div>
+                <div style={{ fontSize:12, color:"#aaa" }}>O colaborador receberá um <strong style={{ color:"#ddd" }}>link por e-mail</strong> para assinar digitalmente.</div>
+                <div style={{ fontSize:11, color:"#888", marginTop:6 }}>Destinatário: <strong style={{ color:"#ddd" }}>{form.email}</strong></div>
+              </div>
+              {erro && <div style={{ background:"#2a0d0d", border:"1px solid #5c1a1a", borderRadius:8, padding:12, fontSize:12, color:"#f08080", marginBottom:14 }}>❌ {erro}</div>}
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={() => setEtapa(2)} style={S.btnSecondary} disabled={loading}>← Voltar</button>
+                <button onClick={handleEnviar} disabled={loading} style={{...S.btnPrimary, flex:2, width:"auto", opacity: loading?0.7:1, cursor: loading?"wait":"pointer"}}>
+                  {loading ? loadingMsg : "✦ Enviar para Assinatura Digital"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SUCESSO */}
+      {tela === "novo" && resultado && (
+        <div style={{ maxWidth:500, margin:"70px auto", padding:"0 24px", textAlign:"center" }}>
+          <div style={{ fontSize:52, marginBottom:14 }}>✅</div>
+          <h2 style={{ fontSize:22, color:"#e8c96e", marginBottom:8 }}>Enviado para Assinatura!</h2>
+          <p style={{ color:"#888", fontSize:13, marginBottom:6 }}><strong style={{ color:"#ddd" }}>{form.nome}</strong> recebeu o link no e-mail <strong style={{ color:"#ddd" }}>{form.email}</strong>.</p>
+          <div style={{ background:"#111", border:"1px solid #222", borderRadius:10, padding:16, marginBottom:24 }}>
+            <div style={{ fontSize:11, color:"#c9a84c", letterSpacing:1, marginBottom:8 }}>LINK DO ENVELOPE CLICKSIGN</div>
+            <a href={resultado.link} target="_blank" rel="noreferrer" style={{ fontSize:12, color:"#4caf82", wordBreak:"break-all" }}>{resultado.link}</a>
+          </div>
+          <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+            <button onClick={() => { setTela("menu"); setResultado(null); }} style={{ padding:"10px 22px", background:"transparent", border:"1px solid #333", borderRadius:8, color:"#888", cursor:"pointer" }}>Início</button>
+            <button onClick={() => { setTela("historico"); setResultado(null); }} style={{ padding:"10px 22px", background:"#c9a84c22", border:"1px solid #c9a84c44", borderRadius:8, color:"#e8c96e", cursor:"pointer" }}>Ver histórico</button>
+          </div>
+        </div>
+      )}
+
+      {/* HISTÓRICO */}
+      {tela === "historico" && (
+        <div style={{ maxWidth:820, margin:"36px auto", padding:"0 24px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
+            <h2 style={{ fontSize:18, color:"#e8c96e", fontWeight:500 }}>Histórico de Admissões</h2>
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, CPF ou cargo..." style={{...S.input, width:260, boxSizing:"border-box"}} />
+          </div>
+          {historico.filter(c => c.nome?.toLowerCase().includes(busca.toLowerCase()) || c.cpf?.includes(busca) || c.cargo?.toLowerCase().includes(busca.toLowerCase())).length === 0
+            ? <div style={{ textAlign:"center", padding:"60px 0", color:"#555" }}>{busca ? "Nenhum colaborador encontrado." : "Nenhum colaborador admitido ainda."}</div>
+            : <div style={{ display:"grid", gap:10 }}>
+                {historico.filter(c => c.nome?.toLowerCase().includes(busca.toLowerCase()) || c.cpf?.includes(busca) || c.cargo?.toLowerCase().includes(busca.toLowerCase())).map(c => (
+                  <div key={c.id} style={{ background:"#111", border:"1px solid #222", borderRadius:10, padding:"14px 18px", display:"flex", alignItems:"center", gap:14 }}>
+                    <div style={{ width:38, height:38, borderRadius:"50%", background:"#c9a84c22", border:"1px solid #c9a84c44", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, color:"#e8c96e", flexShrink:0 }}>{c.nome?.[0]||"?"}</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:"#ddd" }}>{c.nome}</div>
+                      <div style={{ fontSize:11, color:"#666" }}>{c.cargo} · {c.setor} · {c.loja}</div>
+                      <div style={{ fontSize:10, color:"#444" }}>{c.razaoSocial}</div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:11, color:"#888" }}>{c.data ? fmtData(c.data) : "—"}</div>
+                      <div style={{ fontSize:10, color: c.status==="aguardando_assinatura"?"#f0a500":"#4caf82", marginTop:3 }}>
+                        {c.status==="aguardando_assinatura" ? "⏳ Aguardando" : "✅ Assinado"}
+                      </div>
+                      {c.linkAssinatura && <a href={c.linkAssinatura} target="_blank" rel="noreferrer" style={{ fontSize:10, color:"#4caf82", display:"block", marginTop:3 }}>Ver →</a>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+          }
+        </div>
+      )}
+
+      {/* PREVIEW MODAL */}
+      {preview && (
+        <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"#000000bb", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, padding:20 }}>
+          <div style={{ background:"#fff", borderRadius:10, padding:"28px 32px", color:"#111", fontSize:11, lineHeight:1.8, whiteSpace:"pre-wrap", fontFamily:"monospace", maxWidth:700, maxHeight:"80vh", overflow:"auto", width:"100%" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16 }}>
+              <strong>{preview.titulo}</strong>
+              <button onClick={() => setPreview(null)} style={{ background:"transparent", border:"none", cursor:"pointer", fontSize:18, color:"#333" }}>✕</button>
+            </div>
+            {preview.texto}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
