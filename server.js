@@ -78,7 +78,6 @@ const server = http.createServer(function(req, res) {
 
       console.log("INICIO:", col.nome, col.email);
 
-      // 1. Criar envelope
       const env = await request(CLICKSIGN_BASE + "/envelopes", "POST", token, {
         data: { type: "envelopes", attributes: {
           name: "Admissao - " + col.nome + " - " + col.data,
@@ -86,15 +85,9 @@ const server = http.createServer(function(req, res) {
         }}
       });
       console.log("ENV:", env.status, JSON.stringify(env.body).slice(0, 200));
-      if (env.status !== 201) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body }));
-        return;
-      }
+      if (env.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body })); return; }
       const envId = env.body.data.id;
-      console.log("ENVELOPE ID:", envId);
 
-      // 2. Aguardar e adicionar documento
       await sleep(3000);
       const docR = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/documents", "POST", token, {
         data: { type: "documents", attributes: {
@@ -103,55 +96,44 @@ const server = http.createServer(function(req, res) {
         }}
       });
       console.log("DOC:", docR.status, JSON.stringify(docR.body).slice(0, 200));
-      if (docR.status !== 201) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: docR.body }));
-        return;
-      }
+      if (docR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: docR.body })); return; }
 
-      // 3. Aguardar e adicionar signatario
       await sleep(2000);
-      const sigAttrs = {
-        action: "sign",
-        name: col.nome,
-        email: col.email,
-        communicate_events: {
-          document_signed: { email: { active: true }, whatsapp: { active: false } },
-          envelope_finished: { email: { active: true } }
+      const signatarioBody = {
+        data: {
+          type: "signers",
+          attributes: { name: col.nome, email: col.email }
         }
       };
       const cpfClean = col.cpf ? col.cpf.replace(/[^0-9]/g, "") : "";
-      if (cpfClean.length === 11) sigAttrs.cpf = cpfClean;
+      if (cpfClean.length === 11) signatarioBody.data.attributes.cpf = cpfClean;
 
-      const sig = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
-        data: { type: "requirements", attributes: sigAttrs }
+      const sigR = await request(CLICKSIGN_BASE + "/signers", "POST", token, signatarioBody);
+      console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body).slice(0, 300));
+      if (sigR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao criar signatario", detail: sigR.body })); return; }
+      const signerId = sigR.body.data.id;
+
+      await sleep(2000);
+      const reqR = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
+        data: {
+          type: "requirements",
+          attributes: { action: "sign" },
+          relationships: { signer: { data: { type: "signers", id: signerId } } }
+        }
       });
-      console.log("SIG:", sig.status, JSON.stringify(sig.body).slice(0, 300));
-      if (sig.status !== 201) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao adicionar signatario", detail: sig.body }));
-        return;
-      }
+      console.log("REQ:", reqR.status, JSON.stringify(reqR.body).slice(0, 300));
+      if (reqR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao vincular signatario", detail: reqR.body })); return; }
 
-      // 4. Aguardar e ativar envelope
       await sleep(2000);
       const ativ = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/activate", "PATCH", token, {
         data: { type: "envelopes", id: envId }
       });
       console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0, 200));
-      if (ativ.status !== 200) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body }));
-        return;
-      }
+      if (ativ.status !== 200) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
 
       console.log("SUCESSO:", envId);
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        envelopeId: envId,
-        link: "https://app.clicksign.com/sign/" + envId,
-        status: "enviado"
-      }));
+      res.end(JSON.stringify({ envelopeId: envId, link: "https://app.clicksign.com/sign/" + envId, status: "enviado" }));
 
     } catch(e) {
       console.log("ERRO:", e.message);
