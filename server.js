@@ -2,6 +2,10 @@ const http = require("http");
 const PORT = process.env.PORT || 3000;
 const CLICKSIGN_BASE = "https://app.clicksign.com/api/v3";
 
+function sleep(ms) {
+  return new Promise(function(r) { setTimeout(r, ms); });
+}
+
 function request(url, method, token, body) {
   return new Promise(function(resolve, reject) {
     const u = new URL(url);
@@ -74,25 +78,39 @@ const server = http.createServer(function(req, res) {
 
       console.log("INICIO:", col.nome, col.email);
 
+      // 1. Criar envelope
       const env = await request(CLICKSIGN_BASE + "/envelopes", "POST", token, {
         data: { type: "envelopes", attributes: {
           name: "Admissao - " + col.nome + " - " + col.data,
           locale: "pt-BR", auto_close: true, remind_interval: 3, block_after_refusal: true
         }}
       });
-      console.log("ENV:", env.status, JSON.stringify(env.body).slice(0,300));
-      if (env.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body })); return; }
+      console.log("ENV:", env.status, JSON.stringify(env.body).slice(0, 200));
+      if (env.status !== 201) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body }));
+        return;
+      }
       const envId = env.body.data.id;
+      console.log("ENVELOPE ID:", envId);
 
+      // 2. Aguardar e adicionar documento
+      await sleep(3000);
       const docR = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/documents", "POST", token, {
         data: { type: "documents", attributes: {
           filename: doc.nome,
           content_base64: "data:application/pdf;base64," + doc.pdf_base64
         }}
       });
-      console.log("DOC:", docR.status, JSON.stringify(docR.body).slice(0,300));
-      if (docR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: docR.body })); return; }
+      console.log("DOC:", docR.status, JSON.stringify(docR.body).slice(0, 200));
+      if (docR.status !== 201) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: docR.body }));
+        return;
+      }
 
+      // 3. Aguardar e adicionar signatario
+      await sleep(2000);
       const sigAttrs = {
         action: "sign",
         name: col.nome,
@@ -108,18 +126,32 @@ const server = http.createServer(function(req, res) {
       const sig = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: { type: "requirements", attributes: sigAttrs }
       });
-      console.log("SIG:", sig.status, JSON.stringify(sig.body).slice(0,300));
-      if (sig.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao adicionar signatario", detail: sig.body })); return; }
+      console.log("SIG:", sig.status, JSON.stringify(sig.body).slice(0, 300));
+      if (sig.status !== 201) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: "Erro ao adicionar signatario", detail: sig.body }));
+        return;
+      }
 
+      // 4. Aguardar e ativar envelope
+      await sleep(2000);
       const ativ = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/activate", "PATCH", token, {
         data: { type: "envelopes", id: envId }
       });
-      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0,200));
-      if (ativ.status !== 200) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
+      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0, 200));
+      if (ativ.status !== 200) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body }));
+        return;
+      }
 
       console.log("SUCESSO:", envId);
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ envelopeId: envId, link: "https://app.clicksign.com/sign/" + envId, status: "enviado" }));
+      res.end(JSON.stringify({
+        envelopeId: envId,
+        link: "https://app.clicksign.com/sign/" + envId,
+        status: "enviado"
+      }));
 
     } catch(e) {
       console.log("ERRO:", e.message);
