@@ -141,12 +141,16 @@ const server = http.createServer(function(req, res) {
       console.log("SIGNER ID:", signerId);
 
       // 4. Vincular signatário ao documento
+      // ✅ action: "agree" (válido na v3) + role: "sign" (obrigatório)
       await sleep(3000);
       console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
       const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "agree" },
+          attributes: {
+            action: "agree",
+            role: "sign"
+          },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
