@@ -95,15 +95,18 @@ const server = http.createServer(function(req, res) {
         return;
       }
 
-      // ✅ Log completo do colaborador para ver todos os campos recebidos
       console.log("INICIO:", col.nome, col.email);
-      console.log("COLABORADOR COMPLETO:", JSON.stringify(col));
 
       // 1. Criar envelope
+      // ✅ CORRIGIDO: rubric_enabled: false — desativa rubrica que bloqueava ativação
       const env = await requestWithRetry(CLICKSIGN_BASE + "/envelopes", "POST", token, {
         data: { type: "envelopes", attributes: {
           name: "Admissao - " + col.nome + " - " + col.data,
-          locale: "pt-BR", auto_close: true, remind_interval: 3, block_after_refusal: true
+          locale: "pt-BR",
+          auto_close: true,
+          remind_interval: 3,
+          block_after_refusal: true,
+          rubric_enabled: false
         }}
       });
       console.log("ENV:", env.status);
@@ -132,10 +135,9 @@ const server = http.createServer(function(req, res) {
       const docId = docR.body.data.id;
       console.log("DOC ID:", docId);
 
-      // 3. Criar signatário com CPF formatado
+      // 3. Criar signatário com CPF
       await sleep(3000);
       const cpfFormatado = formatarCPF(col.cpf);
-      console.log("CPF recebido:", col.cpf, "| Formatado:", cpfFormatado);
       const signerAttr = { name: col.nome, email: col.email };
       if (cpfFormatado) signerAttr.documentation = cpfFormatado;
 
@@ -151,7 +153,7 @@ const server = http.createServer(function(req, res) {
       const signerId = sigR.body.data.id;
       console.log("SIGNER ID:", signerId);
 
-      // 4. Vincular signatário ao documento — SEM auth (não disponível nesta conta)
+      // 4. Vincular signatário ao documento
       await sleep(3000);
       console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
       const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
