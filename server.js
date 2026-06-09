@@ -102,7 +102,7 @@ const server = http.createServer(async (request, response) => {
         data: { type: "requirements", attributes: { action: "agree", role: "sign" },
           relationships: { document: { data: { type: "documents", id: docId } }, signer: { data: { type: "signers", id: signerId } } }}
       });
-      console.log("REQ AGREE:", rAgree.status, JSON.stringify(rAgree.body).slice(0,100));
+      console.log("REQ AGREE:", rAgree.status);
       if (rAgree.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro agree", detail: rAgree.body })); return; }
 
       // 4b. RUBRICATE
@@ -111,29 +111,24 @@ const server = http.createServer(async (request, response) => {
         data: { type: "requirements", attributes: { action: "rubricate", pages: "1" },
           relationships: { document: { data: { type: "documents", id: docId } }, signer: { data: { type: "signers", id: signerId } } }}
       });
-      console.log("REQ RUBRICATE:", rRub.status, JSON.stringify(rRub.body).slice(0,100));
+      console.log("REQ RUBRICATE:", rRub.status);
       if (rRub.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro rubricate", detail: rRub.body })); return; }
 
-      // 4c. PROVIDE_EVIDENCE (verificação de identidade — obrigatória no plano Plus)
+      // 4c. PROVIDE_EVIDENCE com selfie — obrigatório no plano Plus
       await sleep(2000);
       const rEvidence = await reqRetry(BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
-        data: { type: "requirements", attributes: { action: "provide_evidence" },
+        data: { type: "requirements", attributes: { action: "provide_evidence", auth: "selfie" },
           relationships: { document: { data: { type: "documents", id: docId } }, signer: { data: { type: "signers", id: signerId } } }}
       });
       console.log("REQ EVIDENCE:", rEvidence.status, JSON.stringify(rEvidence.body).slice(0,200));
-      // Não bloqueia se falhar — só loga
-
-      // Diagnóstico com signer incluído
-      await sleep(2000);
-      const allReq = await reqRetry(BASE + "/envelopes/" + envId + "/requirements?include=signer,document", "GET", token, null);
-      console.log("TODOS REQS:", JSON.stringify(allReq.body));
+      if (rEvidence.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro evidence", detail: rEvidence.body })); return; }
 
       // 5. Ativar
       await sleep(3000);
       const ativ = await reqRetry(BASE + "/envelopes/" + envId, "PATCH", token, {
         data: { type: "envelopes", id: envId, attributes: { status: "running" } }
       });
-      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body));
+      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0,300));
       if (ativ.status !== 200) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ativar", detail: ativ.body })); return; }
 
       console.log("SUCESSO:", envId);
