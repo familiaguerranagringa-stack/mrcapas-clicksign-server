@@ -108,7 +108,7 @@ const server = http.createServer(function(req, res) {
       const cpfClean = col.cpf ? col.cpf.replace(/[^0-9]/g, "") : "";
       if (cpfClean.length === 11) signatarioBody.data.attributes.cpf = cpfClean;
 
-      const sigR = await request(CLICKSIGN_BASE + "/signers", "POST", token, signatarioBody);
+      const sigR = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/signers", "POST", token, signatarioBody);
       console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body).slice(0, 300));
       if (sigR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao criar signatario", detail: sigR.body })); return; }
       const signerId = sigR.body.data.id;
