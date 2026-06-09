@@ -1,29 +1,27 @@
 const http = require("http");
-
 const PORT = process.env.PORT || 3000;
 const CLICKSIGN_BASE = "https://app.clicksign.com/api/v3";
 
 function request(url, method, token, body) {
-  return new Promise((resolve, reject) => {
+  return new Promise(function(resolve, reject) {
     const u = new URL(url);
     const data = body ? JSON.stringify(body) : null;
-    const options = {
+    const opts = {
       hostname: u.hostname,
       path: u.pathname + u.search,
-      method,
-      headers: {
-        "Content-Type": "application/vnd.api+json",
-        Authorization: token,
-        ...(data ? { "Content-Length": Buffer.byteLength(data) } : {}),
-      },
+      method: method,
+      headers: Object.assign(
+        { "Content-Type": "application/vnd.api+json", "Authorization": token },
+        data ? { "Content-Length": Buffer.byteLength(data) } : {}
+      )
     };
     const https = require("https");
-    const req = https.request(options, (res) => {
+    const req = https.request(opts, function(res) {
       let raw = "";
-      res.on("data", (c) => (raw += c));
-      res.on("end", () => {
+      res.on("data", function(c) { raw += c; });
+      res.on("end", function() {
         try { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
-        catch { resolve({ status: res.statusCode, body: raw }); }
+        catch(e) { resolve({ status: res.statusCode, body: raw }); }
       });
     });
     req.on("error", reject);
@@ -32,17 +30,12 @@ function request(url, method, token, body) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
-  // CORS
+const server = http.createServer(function(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
+  if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
   if (req.method === "GET" && req.url === "/") {
     const fs = require("fs");
@@ -65,107 +58,77 @@ const server = http.createServer(async (req, res) => {
   }
 
   let body = "";
-  req.on("data", (c) => (body += c));
-  req.on("end", async () => {
+  req.on("data", function(c) { body += c; });
+  req.on("end", async function() {
     try {
       const payload = JSON.parse(body);
-      const { clicksign_token, colaborador, documento } = payload;
+      const token = payload.clicksign_token;
+      const col = payload.colaborador;
+      const doc = payload.documento;
 
-      if (!clicksign_token || !colaborador || !documento) {
+      if (!token || !col || !doc) {
         res.writeHead(400);
         res.end(JSON.stringify({ error: "Dados incompletos" }));
         return;
       }
 
-      // 1. Criar envelope
-      const env = await request(`${CLICKSIGN_BASE}/envelopes`, "POST", clicksign_token, {
-        data: {
-          type: "envelopes",
-          attributes: {
-            name: `Admissão – ${colaborador.nome} – ${colaborador.data}`,
-            locale: "pt-BR",
-            auto_close: true,
-            remind_interval: 3,
-            block_after_refusal: true,
-          },
-        },
+      console.log("INICIO:", col.nome, col.email);
+
+      const env = await request(CLICKSIGN_BASE + "/envelopes", "POST", token, {
+        data: { type: "envelopes", attributes: {
+          name: "Admissao - " + col.nome + " - " + col.data,
+          locale: "pt-BR", auto_close: true, remind_interval: 3, block_after_refusal: true
+        }}
       });
+      console.log("ENV:", env.status, JSON.stringify(env.body).slice(0,300));
+      if (env.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body })); return; }
+      const envId = env.body.data.id;
 
-      if (env.status !== 201) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body }));
-        return;
-      }
-
-      const envelopeId = env.body.data.id;
-
-      // 2. Adicionar documento
-      const doc = await request(`${CLICKSIGN_BASE}/envelopes/${envelopeId}/documents`, "POST", clicksign_token, {
-        data: {
-          type: "documents",
-          attributes: {
-            filename: documento.nome,
-            content_base64: `data:application/pdf;base64,${documento.pdf_base64}`,
-          },
-        },
+      const docR = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/documents", "POST", token, {
+        data: { type: "documents", attributes: {
+          filename: doc.nome,
+          content_base64: "data:application/pdf;base64," + doc.pdf_base64
+        }}
       });
+      console.log("DOC:", docR.status, JSON.stringify(docR.body).slice(0,300));
+      if (docR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: docR.body })); return; }
 
-      if (doc.status !== 201) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: doc.body }));
-        return;
-      }
+      const sigAttrs = {
+        action: "sign",
+        name: col.nome,
+        email: col.email,
+        communicate_events: {
+          document_signed: { email: { active: true }, whatsapp: { active: false } },
+          envelope_finished: { email: { active: true } }
+        }
+      };
+      const cpfClean = col.cpf ? col.cpf.replace(/[^0-9]/g, "") : "";
+      if (cpfClean.length === 11) sigAttrs.cpf = cpfClean;
 
-      // 3. Adicionar signatário
-      const sig = await request(`${CLICKSIGN_BASE}/envelopes/${envelopeId}/requirements`, "POST", clicksign_token, {
-        data: {
-          type: "requirements",
-          attributes: {
-            action: "sign",
-            role: "sign",
-            name: colaborador.nome,
-            email: colaborador.email,
-            cpf: colaborador.cpf,
-            communicate_events: {
-              document_signed: { email: { active: true }, whatsapp: { active: false } },
-              envelope_finished: { email: { active: true } },
-            },
-          },
-        },
+      const sig = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
+        data: { type: "requirements", attributes: sigAttrs }
       });
+      console.log("SIG:", sig.status, JSON.stringify(sig.body).slice(0,300));
+      if (sig.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao adicionar signatario", detail: sig.body })); return; }
 
-      if (sig.status !== 201) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao adicionar signatário", detail: sig.body }));
-        return;
-      }
-
-      // 4. Ativar envelope
-      const ativ = await request(`${CLICKSIGN_BASE}/envelopes/${envelopeId}/activate`, "PATCH", clicksign_token, {
-        data: { type: "envelopes", id: envelopeId },
+      const ativ = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/activate", "PATCH", token, {
+        data: { type: "envelopes", id: envId }
       });
+      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0,200));
+      if (ativ.status !== 200) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
 
-      if (ativ.status !== 200) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body }));
-        return;
-      }
-
-      // Sucesso
+      console.log("SUCESSO:", envId);
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        envelopeId,
-        link: `https://app.clicksign.com/sign/${envelopeId}`,
-        status: "enviado",
-      }));
+      res.end(JSON.stringify({ envelopeId: envId, link: "https://app.clicksign.com/sign/" + envId, status: "enviado" }));
 
-    } catch (e) {
+    } catch(e) {
+      console.log("ERRO:", e.message);
       res.writeHead(500);
       res.end(JSON.stringify({ error: e.message }));
     }
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Servidor MR. CAPAS rodando na porta ${PORT}`);
+server.listen(PORT, function() {
+  console.log("Servidor MR. CAPAS rodando na porta " + PORT);
 });
