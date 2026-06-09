@@ -99,6 +99,7 @@ const server = http.createServer(function(req, res) {
       });
       console.log("DOC:", docR.status);
       if (docR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: docR.body })); return; }
+      const docId = docR.body.data.id;
 
       // 3. Criar signatario no envelope
       await sleep(2000);
@@ -108,17 +109,20 @@ const server = http.createServer(function(req, res) {
           email: col.email
         }}
       });
-      console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body).slice(0, 200));
+      console.log("SIGNER:", sigR.status);
       if (sigR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao criar signatario", detail: sigR.body })); return; }
       const signerId = sigR.body.data.id;
 
-      // 4. Vincular signatario como requisito
+      // 4. Vincular signatario + documento como requisito
       await sleep(2000);
       const reqR = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
           attributes: { action: "agree", role: "sign" },
-          relationships: { signer: { data: { type: "signers", id: signerId } } }
+          relationships: {
+            signer: { data: { type: "signers", id: signerId } },
+            document: { data: { type: "documents", id: docId } }
+          }
         }
       });
       console.log("REQ:", reqR.status, JSON.stringify(reqR.body).slice(0, 300));
