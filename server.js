@@ -112,16 +112,16 @@ const server = http.createServer(function(req, res) {
       if (sigR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao criar signatario", detail: sigR.body })); return; }
       const signerId = sigR.body.data.id;
 
-      // 4. Vincular signatario ao envelope como requisito
+      // 4. Vincular signatario como requisito
       await sleep(2000);
       const reqR = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "agree" },
+          attributes: { action: "agree", role: "sign" },
           relationships: { signer: { data: { type: "signers", id: signerId } } }
         }
       });
-      console.log("REQ:", reqR.status, JSON.stringify(reqR.body).slice(0, 200));
+      console.log("REQ:", reqR.status, JSON.stringify(reqR.body).slice(0, 300));
       if (reqR.status !== 201) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao vincular signatario", detail: reqR.body })); return; }
 
       // 5. Ativar envelope
@@ -129,7 +129,7 @@ const server = http.createServer(function(req, res) {
       const ativ = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/activate", "PATCH", token, {
         data: { type: "envelopes", id: envId }
       });
-      console.log("ATIV:", ativ.status);
+      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0, 200));
       if (ativ.status !== 200) { res.writeHead(500); res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
 
       console.log("SUCESSO:", envId);
