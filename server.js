@@ -153,7 +153,7 @@ const server = http.createServer(function(req, res) {
 
       // 4a. Requisito de assinatura (agree)
       await sleep(3000);
-      console.log("Criando requisito AGREE: doc=" + docId + " signer=" + signerId);
+      console.log("Criando requisito AGREE");
       const reqAgree = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
@@ -171,14 +171,13 @@ const server = http.createServer(function(req, res) {
         return;
       }
 
-      // 4b. Requisito de rubrica (rubricate)
-      // ✅ NOVO: rubric_enabled=true exige este segundo requisito para ativar
+      // 4b. Requisito de rubrica — SEM role (rubricate não aceita role)
       await sleep(2000);
-      console.log("Criando requisito RUBRICATE: doc=" + docId + " signer=" + signerId);
+      console.log("Criando requisito RUBRICATE");
       const reqRub = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "rubricate", role: "sign" },
+          attributes: { action: "rubricate" },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
