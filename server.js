@@ -124,11 +124,13 @@ const server = http.createServer(function(req, res) {
       console.log("DOC ID:", docId);
 
       // 3. Criar signatário
+      // ✅ CORRIGIDO: adicionado delivery: "email" obrigatório para ativação
       await sleep(3000);
       const sigR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: {
           name: col.nome,
-          email: col.email
+          email: col.email,
+          delivery: "email"
         }}
       });
       console.log("SIGNER:", sigR.status);
@@ -161,7 +163,6 @@ const server = http.createServer(function(req, res) {
       }
 
       // 5. Ativar envelope
-      // ✅ CORRIGIDO: PATCH no envelope com status "running" (v3 não tem /activate)
       await sleep(3000);
       const ativ = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId, "PATCH", token, {
         data: {
