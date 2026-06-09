@@ -151,7 +151,7 @@ const server = http.createServer(function(req, res) {
       const signerId = sigR.body.data.id;
       console.log("SIGNER ID:", signerId);
 
-      // 4a. Requisito de assinatura (agree)
+      // 4a. Requisito de assinatura
       await sleep(3000);
       console.log("Criando requisito AGREE");
       const reqAgree = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
@@ -171,13 +171,14 @@ const server = http.createServer(function(req, res) {
         return;
       }
 
-      // 4b. Requisito de rubrica — SEM role (rubricate não aceita role)
+      // 4b. Requisito de rubrica com pages
+      // ✅ pages: [1] — rubrica na primeira página (rubric_enabled=true exige este requisito)
       await sleep(2000);
       console.log("Criando requisito RUBRICATE");
       const reqRub = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "rubricate" },
+          attributes: { action: "rubricate", pages: [1] },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
