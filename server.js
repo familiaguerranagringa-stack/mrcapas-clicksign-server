@@ -97,13 +97,14 @@ const server = http.createServer(function(req, res) {
           locale: "pt-BR", auto_close: true, remind_interval: 3, block_after_refusal: true
         }}
       });
-      console.log("ENV:", env.status, JSON.stringify(env.body));
+      console.log("ENV:", env.status);
       if (env.status !== 201) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body }));
         return;
       }
       const envId = env.body.data.id;
+      console.log("ENV ID:", envId);
 
       // 2. Adicionar documento
       await sleep(4000);
@@ -122,56 +123,52 @@ const server = http.createServer(function(req, res) {
       const docId = docR.body.data.id;
       console.log("DOC ID:", docId);
 
-      // 3. Criar signatário — apenas nome e email (campos extras causam 400)
+      // 3. Criar signatário
+      // ✅ CORRIGIDO: adicionado documentation (CPF) — obrigatório pois has_documentation=true
       await sleep(3000);
       const sigR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: {
           name: col.nome,
-          email: col.email
+          email: col.email,
+          documentation: col.cpf
         }}
       });
-      console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body));
+      console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body).slice(0, 200));
       if (sigR.status !== 201) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao criar signatario", detail: sigR.body }));
         return;
       }
       const signerId = sigR.body.data.id;
+      console.log("SIGNER ID:", signerId);
 
       // 4. Vincular signatário ao documento
+      // ✅ CORRIGIDO: removido auth (não disponível nesta conta)
       await sleep(3000);
+      console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
       const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "agree", role: "sign", auth: "email" },
+          attributes: { action: "agree", role: "sign" },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
           }
         }
       });
-      // ✅ Log COMPLETO sem corte
-      console.log("REQ:", reqR.status, JSON.stringify(reqR.body));
+      console.log("REQ:", reqR.status, JSON.stringify(reqR.body).slice(0, 200));
       if (reqR.status !== 201) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao vincular signatario", detail: reqR.body }));
         return;
       }
 
-      // ✅ DIAGNÓSTICO COMPLETO antes de ativar
-      await sleep(2000);
-      const checkSig = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/signers", "GET", token, null);
-      console.log("CHECK SIGNERS:", JSON.stringify(checkSig.body));
-
-      const checkReq = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "GET", token, null);
-      console.log("CHECK REQS:", JSON.stringify(checkReq.body));
-
       // 5. Ativar envelope
       await sleep(3000);
       const ativ = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId, "PATCH", token, {
         data: { type: "envelopes", id: envId, attributes: { status: "running" } }
       });
-      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body));
+      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0, 300));
       if (ativ.status !== 200) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body }));
