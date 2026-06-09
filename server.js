@@ -98,15 +98,13 @@ const server = http.createServer(function(req, res) {
       console.log("INICIO:", col.nome, col.email);
 
       // 1. Criar envelope
-      // ✅ CORRIGIDO: rubric_enabled: false — desativa rubrica que bloqueava ativação
       const env = await requestWithRetry(CLICKSIGN_BASE + "/envelopes", "POST", token, {
         data: { type: "envelopes", attributes: {
           name: "Admissao - " + col.nome + " - " + col.data,
           locale: "pt-BR",
           auto_close: true,
           remind_interval: 3,
-          block_after_refusal: true,
-          rubric_enabled: false
+          block_after_refusal: true
         }}
       });
       console.log("ENV:", env.status);
@@ -154,19 +152,20 @@ const server = http.createServer(function(req, res) {
       console.log("SIGNER ID:", signerId);
 
       // 4. Vincular signatário ao documento
+      // ✅ rubric_field: false — desativa rubrica no requisito
       await sleep(3000);
       console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
       const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "agree", role: "sign" },
+          attributes: { action: "agree", role: "sign", rubric_field: false },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
           }
         }
       });
-      console.log("REQ:", reqR.status, JSON.stringify(reqR.body).slice(0, 200));
+      console.log("REQ:", reqR.status, JSON.stringify(reqR.body).slice(0, 300));
       if (reqR.status !== 201) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao vincular signatario", detail: reqR.body }));
