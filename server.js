@@ -141,16 +141,12 @@ const server = http.createServer(function(req, res) {
       console.log("SIGNER ID:", signerId);
 
       // 4. Vincular signatário ao documento
-      // ✅ action: "agree" (válido na v3) + role: "sign" (obrigatório)
       await sleep(3000);
       console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
       const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: {
-            action: "agree",
-            role: "sign"
-          },
+          attributes: { action: "agree", role: "sign" },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
@@ -165,11 +161,16 @@ const server = http.createServer(function(req, res) {
       }
 
       // 5. Ativar envelope
+      // ✅ CORRIGIDO: PATCH no envelope com status "running" (v3 não tem /activate)
       await sleep(3000);
-      const ativ = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/activate", "PATCH", token, {
-        data: { type: "envelopes", id: envId }
+      const ativ = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId, "PATCH", token, {
+        data: {
+          type: "envelopes",
+          id: envId,
+          attributes: { status: "running" }
+        }
       });
-      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0, 200));
+      console.log("ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0, 300));
       if (ativ.status !== 200) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body }));
