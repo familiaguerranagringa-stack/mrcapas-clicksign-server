@@ -6,8 +6,8 @@ function sleep(ms) {
   return new Promise(function(r) { setTimeout(r, ms); });
 }
 
-// ✅ Formata CPF para XXX.XXX.XXX-XX
 function formatarCPF(cpf) {
+  if (!cpf) return null;
   const digits = String(cpf).replace(/\D/g, "");
   if (digits.length !== 11) return cpf;
   return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
@@ -95,7 +95,9 @@ const server = http.createServer(function(req, res) {
         return;
       }
 
+      // ✅ Log completo do colaborador para ver todos os campos recebidos
       console.log("INICIO:", col.nome, col.email);
+      console.log("COLABORADOR COMPLETO:", JSON.stringify(col));
 
       // 1. Criar envelope
       const env = await requestWithRetry(CLICKSIGN_BASE + "/envelopes", "POST", token, {
@@ -133,15 +135,14 @@ const server = http.createServer(function(req, res) {
       // 3. Criar signatário com CPF formatado
       await sleep(3000);
       const cpfFormatado = formatarCPF(col.cpf);
-      console.log("CPF formatado:", cpfFormatado);
+      console.log("CPF recebido:", col.cpf, "| Formatado:", cpfFormatado);
+      const signerAttr = { name: col.nome, email: col.email };
+      if (cpfFormatado) signerAttr.documentation = cpfFormatado;
+
       const sigR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/signers", "POST", token, {
-        data: { type: "signers", attributes: {
-          name: col.nome,
-          email: col.email,
-          documentation: cpfFormatado
-        }}
+        data: { type: "signers", attributes: signerAttr }
       });
-      console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body).slice(0, 200));
+      console.log("SIGNER:", sigR.status);
       if (sigR.status !== 201) {
         res.writeHead(500);
         res.end(JSON.stringify({ error: "Erro ao criar signatario", detail: sigR.body }));
@@ -150,7 +151,7 @@ const server = http.createServer(function(req, res) {
       const signerId = sigR.body.data.id;
       console.log("SIGNER ID:", signerId);
 
-      // 4. Vincular signatário ao documento
+      // 4. Vincular signatário ao documento — SEM auth (não disponível nesta conta)
       await sleep(3000);
       console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
       const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
