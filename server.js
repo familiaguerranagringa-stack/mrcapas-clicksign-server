@@ -117,7 +117,7 @@ const server = http.createServer(function(req, res) {
       const reqR = await request(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "sign" },
+          attributes: { action: "agree" },
           relationships: { signer: { data: { type: "signers", id: signerId } } }
         }
       });
