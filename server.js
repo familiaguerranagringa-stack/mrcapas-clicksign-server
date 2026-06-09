@@ -36,9 +36,8 @@ async function reqRetry(url, method, token, body) {
   for (let i = 1; i <= 4; i++) {
     const r = await req(url, method, token, body);
     if (r.status !== 429) return r;
-    const wait = i * 6000;
-    console.log("429 - aguardando " + wait + "ms tentativa " + i);
-    await sleep(wait);
+    console.log("429 aguardando " + (i * 6000) + "ms");
+    await sleep(i * 6000);
   }
   return { status: 429, body: { error: "Rate limit" } };
 }
@@ -47,24 +46,14 @@ const server = http.createServer(async (request, response) => {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
   if (request.method === "OPTIONS") { response.writeHead(204); response.end(); return; }
-
   if (request.method === "GET" && request.url === "/") {
     const htmlPath = path.join(__dirname, "index.html");
-    if (fs.existsSync(htmlPath)) {
-      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end(fs.readFileSync(htmlPath));
-    } else {
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ status: "MR. CAPAS online" }));
-    }
+    if (fs.existsSync(htmlPath)) { response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); response.end(fs.readFileSync(htmlPath)); }
+    else { response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ status: "MR. CAPAS online" })); }
     return;
   }
-
-  if (request.method !== "POST" || request.url !== "/enviar") {
-    response.writeHead(404); response.end(JSON.stringify({ error: "Not found" })); return;
-  }
+  if (request.method !== "POST" || request.url !== "/enviar") { response.writeHead(404); response.end(JSON.stringify({ error: "Not found" })); return; }
 
   let body = "";
   request.on("data", c => body += c);
@@ -72,7 +61,6 @@ const server = http.createServer(async (request, response) => {
     try {
       const { clicksign_token: token, colaborador: col, documento: doc } = JSON.parse(body);
       if (!token || !col || !doc) { response.writeHead(400); response.end(JSON.stringify({ error: "Dados incompletos" })); return; }
-
       console.log("INICIO:", col.nome, col.email);
 
       // 1. Envelope
@@ -103,38 +91,41 @@ const server = http.createServer(async (request, response) => {
       const sigR = await reqRetry(BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: sigAttr }
       });
-      console.log("SIGNER:", sigR.status, JSON.stringify(sigR.body));
+      console.log("SIGNER:", sigR.status);
       if (sigR.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro signer", detail: sigR.body })); return; }
       const signerId = sigR.body.data.id;
       console.log("SIGNER ID:", signerId);
 
-      // 4a. Requisito AGREE (com role)
+      // 4a. AGREE
       await sleep(3000);
       const rAgree = await reqRetry(BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
-        data: { type: "requirements",
-          attributes: { action: "agree", role: "sign" },  // ← agree USA role
-          relationships: { document: { data: { type: "documents", id: docId } }, signer: { data: { type: "signers", id: signerId } } }
-        }
+        data: { type: "requirements", attributes: { action: "agree", role: "sign" },
+          relationships: { document: { data: { type: "documents", id: docId } }, signer: { data: { type: "signers", id: signerId } } }}
       });
       console.log("REQ AGREE:", rAgree.status, JSON.stringify(rAgree.body).slice(0,100));
       if (rAgree.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro agree", detail: rAgree.body })); return; }
 
-      // 4b. Requisito RUBRICATE (SEM role — rubricate NÃO aceita role)
+      // 4b. RUBRICATE
       await sleep(2000);
       const rRub = await reqRetry(BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
-        data: { type: "requirements",
-          attributes: { action: "rubricate", pages: "1" },  // ← SEM role, COM pages string
-          relationships: { document: { data: { type: "documents", id: docId } }, signer: { data: { type: "signers", id: signerId } } }
-        }
+        data: { type: "requirements", attributes: { action: "rubricate", pages: "1" },
+          relationships: { document: { data: { type: "documents", id: docId } }, signer: { data: { type: "signers", id: signerId } } }}
       });
       console.log("REQ RUBRICATE:", rRub.status, JSON.stringify(rRub.body).slice(0,100));
       if (rRub.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro rubricate", detail: rRub.body })); return; }
 
-      // Diagnóstico antes de ativar
+      // 4c. PROVIDE_EVIDENCE (verificação de identidade — obrigatória no plano Plus)
       await sleep(2000);
-      const allSig = await reqRetry(BASE + "/envelopes/" + envId + "/signers", "GET", token, null);
-      console.log("TODOS SIGNERS:", JSON.stringify(allSig.body));
-      const allReq = await reqRetry(BASE + "/envelopes/" + envId + "/requirements", "GET", token, null);
+      const rEvidence = await reqRetry(BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
+        data: { type: "requirements", attributes: { action: "provide_evidence" },
+          relationships: { document: { data: { type: "documents", id: docId } }, signer: { data: { type: "signers", id: signerId } } }}
+      });
+      console.log("REQ EVIDENCE:", rEvidence.status, JSON.stringify(rEvidence.body).slice(0,200));
+      // Não bloqueia se falhar — só loga
+
+      // Diagnóstico com signer incluído
+      await sleep(2000);
+      const allReq = await reqRetry(BASE + "/envelopes/" + envId + "/requirements?include=signer,document", "GET", token, null);
       console.log("TODOS REQS:", JSON.stringify(allReq.body));
 
       // 5. Ativar
