@@ -151,24 +151,44 @@ const server = http.createServer(function(req, res) {
       const signerId = sigR.body.data.id;
       console.log("SIGNER ID:", signerId);
 
-      // 4. Vincular signatário ao documento
-      // ✅ rubric_field: false — desativa rubrica no requisito
+      // 4a. Requisito de assinatura (agree)
       await sleep(3000);
-      console.log("Criando requisito: doc=" + docId + " signer=" + signerId);
-      const reqR = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
+      console.log("Criando requisito AGREE: doc=" + docId + " signer=" + signerId);
+      const reqAgree = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
         data: {
           type: "requirements",
-          attributes: { action: "agree", role: "sign", rubric_field: false },
+          attributes: { action: "agree", role: "sign" },
           relationships: {
             document: { data: { type: "documents", id: docId } },
             signer: { data: { type: "signers", id: signerId } }
           }
         }
       });
-      console.log("REQ:", reqR.status, JSON.stringify(reqR.body).slice(0, 300));
-      if (reqR.status !== 201) {
+      console.log("REQ AGREE:", reqAgree.status, JSON.stringify(reqAgree.body).slice(0, 150));
+      if (reqAgree.status !== 201) {
         res.writeHead(500);
-        res.end(JSON.stringify({ error: "Erro ao vincular signatario", detail: reqR.body }));
+        res.end(JSON.stringify({ error: "Erro ao criar requisito agree", detail: reqAgree.body }));
+        return;
+      }
+
+      // 4b. Requisito de rubrica (rubricate)
+      // ✅ NOVO: rubric_enabled=true exige este segundo requisito para ativar
+      await sleep(2000);
+      console.log("Criando requisito RUBRICATE: doc=" + docId + " signer=" + signerId);
+      const reqRub = await requestWithRetry(CLICKSIGN_BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
+        data: {
+          type: "requirements",
+          attributes: { action: "rubricate", role: "sign" },
+          relationships: {
+            document: { data: { type: "documents", id: docId } },
+            signer: { data: { type: "signers", id: signerId } }
+          }
+        }
+      });
+      console.log("REQ RUBRICATE:", reqRub.status, JSON.stringify(reqRub.body).slice(0, 150));
+      if (reqRub.status !== 201) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: "Erro ao criar requisito rubricate", detail: reqRub.body }));
         return;
       }
 
