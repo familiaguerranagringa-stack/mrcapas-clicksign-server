@@ -138,10 +138,14 @@ const server = http.createServer(async (request, response) => {
       // ✅ Configura WhatsApp como canal de notificação quando telefone é fornecido
       if (col.telefone && col.telefone.length >= 10) {
         sigAttr.phone_number = "55" + col.telefone;
-        console.log("P3 phone:", sigAttr.phone_number);
+        // ClickSign suporte confirmou: AMBOS precisam ser "whatsapp"
+        sigAttr.communicate_events = {
+          signature_request: "whatsapp",
+          signature_reminder: "none",
+          document_signed: "whatsapp"
+        };
+        console.log("P3 WhatsApp ativado:", sigAttr.phone_number);
       }
-      // Email automático padrão (funciona 100%)
-      // WhatsApp automático: aguardando ativação pelo suporte ClickSign
       const sigR = await reqRetry(BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: sigAttr }
       });
@@ -201,14 +205,20 @@ const server = http.createServer(async (request, response) => {
       console.log("P5 ATIV:", ativ.status);
       if (ativ.status !== 200) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
 
-      // P6 — Disparar notificação (email + WhatsApp quando telefone presente)
+      // P6 — Notificação: signer-specific quando WhatsApp, geral quando email
       await sleep(2000);
-      const notifyAttrs = {
-        message: "Voce tem documentos de admissao na MR. CAPAS aguardando sua assinatura digital."
-      };
-      const notify = await reqRetry(BASE + "/envelopes/" + envId + "/notifications", "POST", token, {
-        data: { type: "notifications", attributes: notifyAttrs }
-      });
+      let notifyUrl, notifyBody;
+      if (col.telefone && col.telefone.length >= 10) {
+        // Requisição específica por signatário para WhatsApp (suporte ClickSign)
+        notifyUrl = BASE + "/envelopes/" + envId + "/signers/" + signerId + "/notifications";
+        notifyBody = { data: { type: "notifications", attributes: {} } };
+        console.log("P6 notificando via WhatsApp (signer-specific)");
+      } else {
+        notifyUrl = BASE + "/envelopes/" + envId + "/notifications";
+        notifyBody = { data: { type: "notifications", attributes: { message: "Voce tem documentos de admissao na MR. CAPAS aguardando sua assinatura digital." } } };
+        console.log("P6 notificando via email (general)");
+      }
+      const notify = await reqRetry(notifyUrl, "POST", token, notifyBody);
       console.log("P6 NOTIFY:", notify.status, JSON.stringify(notify.body).slice(0, 400));
 
       // P7 — Buscar signer APÓS notificação para pegar o link de assinatura ativo
