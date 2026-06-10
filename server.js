@@ -138,10 +138,15 @@ const server = http.createServer(async (request, response) => {
       // ✅ Configura WhatsApp como canal de notificação quando telefone é fornecido
       if (col.telefone && col.telefone.length >= 10) {
         sigAttr.phone_number = "55" + col.telefone;
-        // Mantém email como canal padrão (funciona)
-        // WhatsApp via botão manual no frontend usa sign/{signerId}
-        console.log("P3 phone:", sigAttr.phone_number);
+        // Com telefone: WhatsApp automático (selfie funciona igual)
+        sigAttr.communicate_events = {
+          signature_request: "whatsapp",
+          signature_reminder: "none",
+          document_signed: "email"
+        };
+        console.log("P3 WhatsApp:", sigAttr.phone_number);
       }
+      // Sem telefone: email padrão (funciona 100%)
       const sigR = await reqRetry(BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: sigAttr }
       });
