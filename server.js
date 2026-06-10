@@ -88,6 +88,8 @@ const server = http.createServer(async (request, response) => {
       // ✅ Token: usa env var (seguro) ou payload (compatibilidade)
       const token = ENV_TOKEN || payload.clicksign_token;
       const col = payload.colaborador;
+      // Garante que telefone existe
+      if (col && !col.telefone) col.telefone = '';
       const doc = payload.documento;
 
       if (!token) {
@@ -133,6 +135,11 @@ const server = http.createServer(async (request, response) => {
       const cpf = formatCPF(col.cpf);
       const sigAttr = { name: col.nome, email: col.email };
       if (cpf) sigAttr.documentation = cpf;
+      // ✅ Adiciona telefone para receber por WhatsApp
+      if (col.telefone && col.telefone.length >= 10) {
+        sigAttr.phone_number = "+55" + col.telefone;
+        console.log("P3 phone:", sigAttr.phone_number);
+      }
       const sigR = await reqRetry(BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: sigAttr }
       });
@@ -195,13 +202,15 @@ const server = http.createServer(async (request, response) => {
       // P6 — Buscar link real de assinatura do signatário
       await sleep(2000);
       const sigInfo = await reqRetry(BASE + "/envelopes/" + envId + "/signers/" + signerId, "GET", token, null);
-      console.log("P6 SIGNER INFO:", JSON.stringify(sigInfo.body).slice(0, 500));
+      console.log("P6 SIGNER INFO FULL:", JSON.stringify(sigInfo.body));
       const sigAttrs = (sigInfo.body && sigInfo.body.data && sigInfo.body.data.attributes) ? sigInfo.body.data.attributes : {};
-      const signingLink = sigAttrs.url || sigAttrs.sign_url || sigAttrs.signing_url || null;
+      const signingLink = sigAttrs.url || sigAttrs.sign_url || sigAttrs.signing_url ||
+                          "https://app.clicksign.com/sign/" + signerId;
+      // signerId como fallback pois ClickSign v3 usa o ID do signatário no link de assinatura
       // P7 — Disparar notificação para o signatário (email + WhatsApp)
       await sleep(2000);
       const notify = await reqRetry(BASE + "/envelopes/" + envId + "/notifications", "POST", token, {
-        data: { type: "notifications" }
+        data: { type: "notifications", attributes: {} }
       });
       console.log("P7 NOTIFY:", notify.status, JSON.stringify(notify.body).slice(0, 300));
 
