@@ -198,13 +198,20 @@ const server = http.createServer(async (request, response) => {
       console.log("P6 SIGNER INFO:", JSON.stringify(sigInfo.body).slice(0, 500));
       const sigAttrs = (sigInfo.body && sigInfo.body.data && sigInfo.body.data.attributes) ? sigInfo.body.data.attributes : {};
       const signingLink = sigAttrs.url || sigAttrs.sign_url || sigAttrs.signing_url || null;
+      // P7 — Disparar notificação para o signatário (email + WhatsApp)
+      await sleep(2000);
+      const notify = await reqRetry(BASE + "/envelopes/" + envId + "/notifications", "POST", token, {
+        data: { type: "notifications" }
+      });
+      console.log("P7 NOTIFY:", notify.status, JSON.stringify(notify.body).slice(0, 300));
+
       console.log("=== SUCESSO ===", envId, "| signing link:", signingLink);
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
         envelopeId: envId,
         link: signingLink,
         envelopeLink: "https://app.clicksign.com/envelopes/" + envId,
-        signerAttrs: sigAttrs,
+        notified: notify.status === 200 || notify.status === 201 || notify.status === 204,
         status: "enviado"
       }));
 
