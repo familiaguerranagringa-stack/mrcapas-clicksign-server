@@ -199,22 +199,38 @@ const server = http.createServer(async (request, response) => {
       console.log("P5 ATIV:", ativ.status);
       if (ativ.status !== 200) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
 
-      // P6 — Buscar link real de assinatura do signatário
-      await sleep(2000);
-      const sigInfo = await reqRetry(BASE + "/envelopes/" + envId + "/signers/" + signerId, "GET", token, null);
-      console.log("P6 SIGNER INFO FULL:", JSON.stringify(sigInfo.body));
-      const sigAttrs = (sigInfo.body && sigInfo.body.data && sigInfo.body.data.attributes) ? sigInfo.body.data.attributes : {};
-      const signingLink = sigAttrs.url || sigAttrs.sign_url || sigAttrs.signing_url ||
-                          "https://app.clicksign.com/sign/" + signerId;
-      // signerId como fallback pois ClickSign v3 usa o ID do signatário no link de assinatura
-      // P7 — Disparar notificação para o signatário (email + WhatsApp)
+      // P6 — Disparar notificação (email + WhatsApp) ANTES de buscar o link
+      // O link de assinatura só fica ativo APÓS a notificação ser enviada
       await sleep(2000);
       const notify = await reqRetry(BASE + "/envelopes/" + envId + "/notifications", "POST", token, {
-        data: { type: "notifications", attributes: {} }
+        data: {
+          type: "notifications",
+          attributes: {
+            message: "Voce tem documentos de admissao na MR. CAPAS aguardando sua assinatura digital."
+          }
+        }
       });
-      console.log("P7 NOTIFY:", notify.status, JSON.stringify(notify.body).slice(0, 300));
+      console.log("P6 NOTIFY:", notify.status, JSON.stringify(notify.body).slice(0, 300));
 
-      console.log("=== SUCESSO ===", envId, "| signing link:", signingLink);
+      // P7 — Buscar signer APÓS notificação para pegar o link de assinatura ativo
+      await sleep(3000);
+      const sigInfo = await reqRetry(BASE + "/envelopes/" + envId + "/signers/" + signerId, "GET", token, null);
+      console.log("P7 SIGNER FULL:", JSON.stringify(sigInfo.body));
+      const sigAttrs = (sigInfo.body && sigInfo.body.data && sigInfo.body.data.attributes) ? sigInfo.body.data.attributes : {};
+      const ce = sigAttrs.communicate_events || {};
+
+      // Tentar extrair URL do communicate_events (token de assinatura do ClickSign)
+      let signingLink = sigAttrs.url || sigAttrs.sign_url || sigAttrs.signing_url || null;
+      if (!signingLink) {
+        signingLink = (ce.document && ce.document.sign_request && ce.document.sign_request.url) ||
+                      (ce.sign_request && ce.sign_request.url) ||
+                      (ce.document && ce.document.url) || null;
+      }
+      // Fallback: link com signerId (ClickSign usa o UUID do signatário no link)
+      if (!signingLink) signingLink = "https://app.clicksign.com/sign/" + signerId;
+      console.log("P7 SIGNING LINK:", signingLink);
+
+      console.log("=== SUCESSO ===", envId);
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
         envelopeId: envId,
