@@ -137,11 +137,13 @@ const server = http.createServer(async (request, response) => {
       if (cpf) sigAttr.documentation = cpf;
       // ✅ Configura WhatsApp como canal de notificação quando telefone é fornecido
       if (col.telefone && col.telefone.length >= 10) {
-        sigAttr.phone_number = "+55" + col.telefone;
-        // Define WhatsApp como canal para solicitação e lembrete de assinatura
+        // Formato aceito pelo ClickSign: 5522999382278 (sem "+")
+        sigAttr.phone_number = "55" + col.telefone;
+        // signature_request "whatsapp" É aceito no plano Plus
+        // signature_reminder só aceita "none" ou "email" (não "whatsapp")
         sigAttr.communicate_events = {
           signature_request: "whatsapp",
-          signature_reminder: "whatsapp",
+          signature_reminder: "none",
           document_signed: "email"
         };
         console.log("P3 WhatsApp ativado:", sigAttr.phone_number);
@@ -210,10 +212,6 @@ const server = http.createServer(async (request, response) => {
       const notifyAttrs = {
         message: "Voce tem documentos de admissao na MR. CAPAS aguardando sua assinatura digital."
       };
-      // Tenta incluir whatsapp como canal quando telefone foi fornecido
-      if (col.telefone && col.telefone.length >= 10) {
-        notifyAttrs.channels = ["whatsapp", "email"];
-      }
       const notify = await reqRetry(BASE + "/envelopes/" + envId + "/notifications", "POST", token, {
         data: { type: "notifications", attributes: notifyAttrs }
       });
