@@ -135,10 +135,16 @@ const server = http.createServer(async (request, response) => {
       const cpf = formatCPF(col.cpf);
       const sigAttr = { name: col.nome, email: col.email };
       if (cpf) sigAttr.documentation = cpf;
-      // ✅ Adiciona telefone para receber por WhatsApp
+      // ✅ Configura WhatsApp como canal de notificação quando telefone é fornecido
       if (col.telefone && col.telefone.length >= 10) {
         sigAttr.phone_number = "+55" + col.telefone;
-        console.log("P3 phone:", sigAttr.phone_number);
+        // Define WhatsApp como canal para solicitação e lembrete de assinatura
+        sigAttr.communicate_events = {
+          signature_request: "whatsapp",
+          signature_reminder: "whatsapp",
+          document_signed: "email"
+        };
+        console.log("P3 WhatsApp ativado:", sigAttr.phone_number);
       }
       const sigR = await reqRetry(BASE + "/envelopes/" + envId + "/signers", "POST", token, {
         data: { type: "signers", attributes: sigAttr }
@@ -237,6 +243,7 @@ const server = http.createServer(async (request, response) => {
         link: signingLink,
         envelopeLink: "https://app.clicksign.com/envelopes/" + envId,
         notified: notify.status === 200 || notify.status === 201 || notify.status === 204,
+        whatsappSent: !!(col.telefone && col.telefone.length >= 10),
         status: "enviado"
       }));
 
