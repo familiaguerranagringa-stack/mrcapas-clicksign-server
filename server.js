@@ -192,11 +192,19 @@ const server = http.createServer(async (request, response) => {
       console.log("P5 ATIV:", ativ.status);
       if (ativ.status !== 200) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
 
-      console.log("=== SUCESSO ===", envId);
+      // P6 — Buscar link real de assinatura do signatário
+      await sleep(2000);
+      const sigInfo = await reqRetry(BASE + "/envelopes/" + envId + "/signers/" + signerId, "GET", token, null);
+      console.log("P6 SIGNER INFO:", JSON.stringify(sigInfo.body).slice(0, 500));
+      const sigAttrs = (sigInfo.body && sigInfo.body.data && sigInfo.body.data.attributes) ? sigInfo.body.data.attributes : {};
+      const signingLink = sigAttrs.url || sigAttrs.sign_url || sigAttrs.signing_url || null;
+      console.log("=== SUCESSO ===", envId, "| signing link:", signingLink);
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
         envelopeId: envId,
-        link: "https://app.clicksign.com/sign/" + envId,
+        link: signingLink,
+        envelopeLink: "https://app.clicksign.com/envelopes/" + envId,
+        signerAttrs: sigAttrs,
         status: "enviado"
       }));
 
