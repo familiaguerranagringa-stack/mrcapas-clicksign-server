@@ -135,6 +135,8 @@ const server = http.createServer(async (request, response) => {
       const cpf = formatCPF(col.cpf);
       const sigAttr = { name: col.nome, email: col.email };
       if (cpf) sigAttr.documentation = cpf;
+      // Data de nascimento — melhora verificação biométrica no ClickSign
+      if (col.nascimento) sigAttr.birthday = col.nascimento;
       // ✅ Configura WhatsApp como canal de notificação quando telefone é fornecido
       if (col.telefone && col.telefone.length >= 10) {
         sigAttr.phone_number = "55" + col.telefone;
