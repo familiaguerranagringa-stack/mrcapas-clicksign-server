@@ -4,6 +4,10 @@ const fs = require("fs");
 const path = require("path");
 const PORT = process.env.PORT || 3000;
 const BASE = "https://app.clicksign.com/api/v3";
+
+// ✅ Token via variável de ambiente (nunca exposto no frontend)
+const ENV_TOKEN = process.env.CLICKSIGN_TOKEN || "";
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function formatCPF(cpf) {
@@ -17,13 +21,21 @@ function req(url, method, token, body) {
     const u = new URL(url);
     const data = body ? JSON.stringify(body) : null;
     const r = https.request({
-      hostname: u.hostname, path: u.pathname + u.search, method,
-      headers: { "Content-Type": "application/vnd.api+json", "Authorization": token,
-        ...(data ? { "Content-Length": Buffer.byteLength(data) } : {}) }
+      hostname: u.hostname,
+      path: u.pathname + u.search,
+      method,
+      headers: {
+        "Content-Type": "application/vnd.api+json",
+        "Authorization": token,
+        ...(data ? { "Content-Length": Buffer.byteLength(data) } : {})
+      }
     }, res => {
       let raw = "";
       res.on("data", c => raw += c);
-      res.on("end", () => { try { resolve({ status: res.statusCode, body: JSON.parse(raw) }); } catch(e) { resolve({ status: res.statusCode, body: raw }); } });
+      res.on("end", () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
+        catch(e) { resolve({ status: res.statusCode, body: raw }); }
+      });
     });
     r.on("error", reject);
     if (data) r.write(data);
@@ -35,10 +47,11 @@ async function reqRetry(url, method, token, body) {
   for (let i = 1; i <= 4; i++) {
     const result = await req(url, method, token, body);
     if (result.status !== 429) return result;
-    console.log("429 - aguardando " + (i * 6000) + "ms");
-    await sleep(i * 6000);
+    const wait = i * 6000;
+    console.log("429 - aguardando " + wait + "ms (tentativa " + i + ")");
+    await sleep(wait);
   }
-  return { status: 429, body: { error: "Rate limit" } };
+  return { status: 429, body: { error: "Rate limit após múltiplas tentativas" } };
 }
 
 const server = http.createServer(async (request, response) => {
@@ -55,7 +68,7 @@ const server = http.createServer(async (request, response) => {
       response.end(fs.readFileSync(htmlPath));
     } else {
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ status: "MR. CAPAS online" }));
+      response.end(JSON.stringify({ status: "MR. CAPAS ClickSign Server online" }));
     }
     return;
   }
@@ -71,21 +84,26 @@ const server = http.createServer(async (request, response) => {
   request.on("end", async () => {
     try {
       const payload = JSON.parse(body);
-      const token = payload.clicksign_token;
+
+      // ✅ Token: usa env var (seguro) ou payload (compatibilidade)
+      const token = ENV_TOKEN || payload.clicksign_token;
       const col = payload.colaborador;
       const doc = payload.documento;
 
-      if (!token || !col || !doc) {
+      if (!token) {
+        response.writeHead(500);
+        response.end(JSON.stringify({ error: "Token ClickSign não configurado. Defina a variável CLICKSIGN_TOKEN no servidor." }));
+        return;
+      }
+      if (!col || !doc) {
         response.writeHead(400);
-        response.end(JSON.stringify({ error: "Dados incompletos" }));
+        response.end(JSON.stringify({ error: "Dados incompletos: colaborador e documento são obrigatórios" }));
         return;
       }
 
-      console.log("--- INICIO ---");
-      console.log("Nome:", col.nome);
-      console.log("Email:", col.email);
+      console.log("--- INICIO ---", col.nome, col.email);
 
-      // PASSO 1 — Criar envelope
+      // P1 — Criar envelope
       const env = await reqRetry(BASE + "/envelopes", "POST", token, {
         data: { type: "envelopes", attributes: {
           name: "Admissao - " + col.nome + " - " + col.data,
@@ -93,11 +111,11 @@ const server = http.createServer(async (request, response) => {
         }}
       });
       console.log("P1 ENV:", env.status);
-      if (env.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro P1", detail: env.body })); return; }
+      if (env.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao criar envelope", detail: env.body })); return; }
       const envId = env.body.data.id;
       console.log("P1 ENV ID:", envId);
 
-      // PASSO 2 — Adicionar documento
+      // P2 — Adicionar documento
       await sleep(4000);
       const docR = await reqRetry(BASE + "/envelopes/" + envId + "/documents", "POST", token, {
         data: { type: "documents", attributes: {
@@ -106,11 +124,11 @@ const server = http.createServer(async (request, response) => {
         }}
       });
       console.log("P2 DOC:", docR.status);
-      if (docR.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro P2", detail: docR.body })); return; }
+      if (docR.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao adicionar documento", detail: docR.body })); return; }
       const docId = docR.body.data.id;
       console.log("P2 DOC ID:", docId);
 
-      // PASSO 3 — Criar signatário
+      // P3 — Criar signatário com CPF
       await sleep(3000);
       const cpf = formatCPF(col.cpf);
       const sigAttr = { name: col.nome, email: col.email };
@@ -119,16 +137,15 @@ const server = http.createServer(async (request, response) => {
         data: { type: "signers", attributes: sigAttr }
       });
       console.log("P3 SIGNER:", sigR.status);
-      if (sigR.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro P3", detail: sigR.body })); return; }
+      if (sigR.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao criar signatário", detail: sigR.body })); return; }
       const signerId = sigR.body.data.id;
       console.log("P3 SIGNER ID:", signerId);
 
-      // PASSO 4A — Requisito: assinatura (agree)
+      // P4A — Requisito: assinatura (agree + role:sign)
       await sleep(3000);
       console.log("P4A usando docId=" + docId + " signerId=" + signerId);
       const rAgree = await reqRetry(BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
-        data: {
-          type: "requirements",
+        data: { type: "requirements",
           attributes: { action: "agree", role: "sign" },
           relationships: {
             document: { data: { type: "documents", id: docId } },
@@ -136,14 +153,13 @@ const server = http.createServer(async (request, response) => {
           }
         }
       });
-      console.log("P4A REQ AGREE:", rAgree.status, JSON.stringify(rAgree.body).slice(0, 100));
-      if (rAgree.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro P4A", detail: rAgree.body })); return; }
+      console.log("P4A REQ AGREE:", rAgree.status);
+      if (rAgree.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao criar requisito agree", detail: rAgree.body })); return; }
 
-      // PASSO 4B — Requisito: rubrica
+      // P4B — Requisito: rubrica (rubricate + pages:"1")
       await sleep(2000);
       const rRub = await reqRetry(BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
-        data: {
-          type: "requirements",
+        data: { type: "requirements",
           attributes: { action: "rubricate", pages: "1" },
           relationships: {
             document: { data: { type: "documents", id: docId } },
@@ -151,14 +167,13 @@ const server = http.createServer(async (request, response) => {
           }
         }
       });
-      console.log("P4B REQ RUBRICATE:", rRub.status, JSON.stringify(rRub.body).slice(0, 100));
-      if (rRub.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro P4B", detail: rRub.body })); return; }
+      console.log("P4B REQ RUBRICATE:", rRub.status);
+      if (rRub.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao criar requisito rubricate", detail: rRub.body })); return; }
 
-      // PASSO 4C — Requisito: selfie (obrigatório no plano Plus)
+      // P4C — Requisito: selfie (provide_evidence + auth:selfie — obrigatório no plano Plus)
       await sleep(2000);
       const rEvidence = await reqRetry(BASE + "/envelopes/" + envId + "/requirements", "POST", token, {
-        data: {
-          type: "requirements",
+        data: { type: "requirements",
           attributes: { action: "provide_evidence", auth: "selfie" },
           relationships: {
             document: { data: { type: "documents", id: docId } },
@@ -166,16 +181,16 @@ const server = http.createServer(async (request, response) => {
           }
         }
       });
-      console.log("P4C REQ EVIDENCE:", rEvidence.status, JSON.stringify(rEvidence.body).slice(0, 150));
-      if (rEvidence.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro P4C", detail: rEvidence.body })); return; }
+      console.log("P4C REQ EVIDENCE:", rEvidence.status);
+      if (rEvidence.status !== 201) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao criar requisito selfie", detail: rEvidence.body })); return; }
 
-      // PASSO 5 — Ativar envelope
+      // P5 — Ativar envelope (PATCH com status:running)
       await sleep(3000);
       const ativ = await reqRetry(BASE + "/envelopes/" + envId, "PATCH", token, {
         data: { type: "envelopes", id: envId, attributes: { status: "running" } }
       });
-      console.log("P5 ATIV:", ativ.status, JSON.stringify(ativ.body).slice(0, 200));
-      if (ativ.status !== 200) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro P5", detail: ativ.body })); return; }
+      console.log("P5 ATIV:", ativ.status);
+      if (ativ.status !== 200) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
 
       console.log("=== SUCESSO ===", envId);
       response.writeHead(200, { "Content-Type": "application/json" });
@@ -193,4 +208,4 @@ const server = http.createServer(async (request, response) => {
   });
 });
 
-server.listen(PORT, () => console.log("Servidor MR. CAPAS porta " + PORT));
+server.listen(PORT, () => console.log("Servidor MR. CAPAS rodando na porta " + PORT));
