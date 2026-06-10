@@ -205,18 +205,19 @@ const server = http.createServer(async (request, response) => {
       console.log("P5 ATIV:", ativ.status);
       if (ativ.status !== 200) { response.writeHead(500); response.end(JSON.stringify({ error: "Erro ao ativar envelope", detail: ativ.body })); return; }
 
-      // P6 — Disparar notificação (email + WhatsApp) ANTES de buscar o link
-      // O link de assinatura só fica ativo APÓS a notificação ser enviada
+      // P6 — Disparar notificação (email + WhatsApp quando telefone presente)
       await sleep(2000);
+      const notifyAttrs = {
+        message: "Voce tem documentos de admissao na MR. CAPAS aguardando sua assinatura digital."
+      };
+      // Tenta incluir whatsapp como canal quando telefone foi fornecido
+      if (col.telefone && col.telefone.length >= 10) {
+        notifyAttrs.channels = ["whatsapp", "email"];
+      }
       const notify = await reqRetry(BASE + "/envelopes/" + envId + "/notifications", "POST", token, {
-        data: {
-          type: "notifications",
-          attributes: {
-            message: "Voce tem documentos de admissao na MR. CAPAS aguardando sua assinatura digital."
-          }
-        }
+        data: { type: "notifications", attributes: notifyAttrs }
       });
-      console.log("P6 NOTIFY:", notify.status, JSON.stringify(notify.body).slice(0, 300));
+      console.log("P6 NOTIFY:", notify.status, JSON.stringify(notify.body).slice(0, 400));
 
       // P7 — Buscar signer APÓS notificação para pegar o link de assinatura ativo
       await sleep(3000);
